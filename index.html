@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0e1116" />
+  <meta name="description" content="PhonoCam: cámara experimental y calculadora de sincronización para phonotropes." />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>PhonoCam — Capture motion</title>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="PhonoCam, inicio">
+        <span class="brand-icon" aria-hidden="true">◉</span>
+        <span>PHONO<span class="brand-accent">CAM</span></span>
+      </a>
+      <span class="topbar-right"><span class="version">FIELD LAB / V0.1</span><span class="top-dot"></span></span>
+    </header>
+
+    <main>
+      <div class="intro">
+        <div class="eyebrow"><span class="eyebrow-line"></span> EXPERIMENTAL ANIMATION TOOLKIT</div>
+        <h1>Motion, <em>in the making.</em></h1>
+        <p>Tu laboratorio portátil para observar, sincronizar y grabar phonotropes.</p>
+      </div>
+
+      <div class="workspace">
+        <section class="camera-panel" aria-label="Cámara de PhonoCam">
+          <div class="panel-head">
+            <span class="panel-title"><span class="panel-icon">▣</span> MONITOR</span>
+            <span class="state-pill" id="cameraState"><span class="pill-dot"></span> CÁMARA APAGADA</span>
+          </div>
+          <div class="viewfinder" id="viewfinder">
+            <video id="cameraPreview" autoplay muted playsinline aria-label="Vista previa de la cámara"></video>
+            <div class="camera-empty" id="cameraEmpty">
+              <div class="empty-symbol" aria-hidden="true">◎</div>
+              <h2>Comienza una sesión</h2>
+              <p>Activa la cámara para ver tu phonotrope y grabar el movimiento.</p>
+              <button class="btn primary" id="startCamera">Activar cámara <span aria-hidden="true">↗</span></button>
+            </div>
+            <div class="viewfinder-top" id="viewfinderTop" hidden>
+              <div class="live-stats"><span class="live-text">LIVE</span><span id="actualResolution">—</span><span class="stat-divider">/</span><span id="actualFps">— FPS</span></div>
+              <span class="rec-state" id="recState" hidden><span class="rec-flash"></span><span id="recTimer">00:00</span></span>
+            </div>
+            <div class="guide-layer" id="guideLayer" hidden aria-hidden="true">
+              <div class="disc-guide"><div class="disc-inner"></div><div class="guide-center"></div><div class="guide-tick top"></div><div class="guide-tick bottom"></div><div class="guide-tick left"></div><div class="guide-tick right"></div></div>
+              <div class="axis horizontal"></div><div class="axis vertical"></div>
+            </div>
+            <div class="viewfinder-bottom" id="viewfinderBottom" hidden><span id="cameraHint">Modo cámara</span><span>PHONOCAM © LAB</span></div>
+          </div>
+          <div class="camera-toolbar">
+            <div class="toolbar-left"><button id="switchCamera" class="icon-button" type="button" disabled title="Cambiar cámara" aria-label="Cambiar cámara">⇄</button><button id="toggleGuide" class="icon-button active" type="button" title="Mostrar u ocultar guías" aria-label="Alternar guías">◎</button><span class="toolbar-caption">GUÍAS</span></div>
+            <button type="button" id="recordButton" class="record-button" disabled aria-label="Iniciar grabación"><span class="record-symbol"></span></button>
+            <div class="toolbar-right"><button id="stopCamera" class="text-button" disabled>Desactivar cámara</button></div>
+          </div>
+          <div class="status-line" role="status" aria-live="polite"><span class="status-signal"></span><span id="statusText">Lista para configurar tu sesión.</span></div>
+          <section class="clip-panel" id="clipPanel" hidden aria-label="Video grabado">
+            <div class="section-heading"><h3>Última grabación</h3><span id="videoFormat"></span></div>
+            <video id="recordedPreview" controls playsinline preload="metadata"></video>
+            <a id="downloadVideo" class="btn primary download" download="phonocam-video.webm">Descargar video ↓</a>
+            <p class="small-note">El archivo se crea localmente en tu dispositivo; PhonoCam no lo sube a ningún servidor.</p>
+          </section>
+        </section>
+
+        <aside class="settings-panel">
+          <div class="panel-head"><span class="panel-title"><span class="panel-icon">☷</span> CONTROLES</span><span class="mini-tag">PHONOTROPE MODE</span></div>
+          <div class="tabs" role="tablist" aria-label="Paneles de configuración"><button class="tab active" id="captureTab" role="tab" aria-selected="true" aria-controls="capturePanel">01 / CAPTURA</button><button class="tab" id="syncTab" role="tab" aria-selected="false" aria-controls="syncPanel">02 / SYNC</button></div>
+
+          <div class="tab-panel" id="capturePanel" role="tabpanel" aria-labelledby="captureTab">
+            <div class="setting-row"><label for="fpsSelect">Frame rate <small>solicitado</small></label><select id="fpsSelect"><option value="12">12 FPS</option><option value="15">15 FPS</option><option value="24" selected>24 FPS</option><option value="25">25 FPS</option><option value="30">30 FPS</option><option value="60">60 FPS</option></select></div>
+            <div class="setting-row"><label for="resolutionSelect">Resolución <small>solicitada</small></label><select id="resolutionSelect"><option value="1280x720">HD 720p</option><option value="1920x1080" selected>Full HD 1080p</option><option value="3840x2160">UHD 4K</option></select></div>
+            <div class="setting-info">La resolución y los FPS finales dependen del teléfono. Compara el valor <strong>LIVE</strong> del monitor con los controles solicitados.</div>
+            <div class="divider"></div>
+            <div class="manual-head"><span>MANUAL CAMERA</span><span id="manualBadge" class="support-badge">SIN INICIAR</span></div>
+            <div class="setting-row manual" id="exposureRow"><label for="exposureSelect">Shutter / exposure</label><select id="exposureSelect" disabled><option value="">No disponible</option></select></div>
+            <div class="setting-row manual" id="isoRow"><label for="isoRange">ISO <span id="isoValue">—</span></label><input id="isoRange" type="range" min="100" max="800" value="100" disabled /></div>
+            <div class="setting-row manual" id="focusRow"><label for="focusSelect">Modo de enfoque</label><select id="focusSelect" disabled><option value="">No disponible</option></select></div>
+            <p class="support-note" id="manualNote">Activa la cámara para detectar qué ajustes manuales expone este navegador. Si no aparecen, necesitas una app nativa para control fino.</p>
+          </div>
+
+          <div class="tab-panel" id="syncPanel" role="tabpanel" aria-labelledby="syncTab" hidden>
+            <div class="setting-row"><label for="rpmSelect">Velocidad del disco</label><select id="rpmSelect"><option value="33.3333333333">33⅓ RPM</option><option value="45" selected>45 RPM</option><option value="78">78 RPM</option><option value="custom">Personalizada</option></select></div>
+            <div class="setting-row" id="customRpmRow" hidden><label for="customRpm">RPM personalizadas</label><input id="customRpm" type="number" min="1" max="300" step="0.1" value="45" inputmode="decimal" /></div>
+            <div class="setting-row"><label for="drawingCount">Dibujos en el disco</label><div class="number-input"><button type="button" id="minusDrawings" aria-label="Quitar un dibujo">−</button><input id="drawingCount" type="number" min="2" max="200" value="32" inputmode="numeric" /><button type="button" id="plusDrawings" aria-label="Agregar un dibujo">+</button></div></div>
+            <div class="setting-row"><label for="stepSelect">Avance por cuadro</label><select id="stepSelect"><option value="1">1 dibujo</option><option value="2">2 dibujos</option><option value="3">3 dibujos</option><option value="4">4 dibujos</option></select></div>
+            <div class="sync-output"><span>FPS TEÓRICOS PARA SINCRONIZAR</span><strong id="idealFps">24.00 <small>FPS</small></strong><p id="syncExplain">45 RPM × 32 dibujos ÷ 60 = 24 FPS.</p></div>
+            <div class="recommendation"><span>PRESETS DE CÁMARA</span><p id="fpsSuggestion">Prueba 24 FPS para avanzar un dibujo por cada cuadro capturado.</p><button type="button" class="btn outline" id="useSyncFps">Usar FPS recomendados ↗</button></div>
+            <p class="support-note">Es una frecuencia de muestreo ideal. No garantiza por sí sola una animación estable: influyen la velocidad real del tornamesa, la captura efectiva y el obturador.</p>
+          </div>
+        </aside>
+      </div>
+      <footer><span>PHONOCAM / OPEN EXPERIMENTAL TOOLS</span><span>CAPTURE IS LOCAL. KEEP MOVING.</span></footer>
+    </main>
+  </div>
+  <script src="./app.js" defer></script>
+</body>
+</html>
