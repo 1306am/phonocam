@@ -39,6 +39,7 @@
   let fitFrame = false;
   let isoFineMode = true;
   let manualFocusDistance = false;
+  let isoDebounceTimer = null, focusDebounceTimer = null;
   function setStudioMode(enabled) {
     studioMode = enabled;
     document.body.classList.toggle('studio-mode', enabled);
@@ -696,8 +697,13 @@
   });
   els.hudIsoRange.addEventListener('input', () => {
     els.hudValue.textContent = Math.round(Number(els.hudIsoRange.value)) + ' · pendiente';
+    clearTimeout(isoDebounceTimer);
+    isoDebounceTimer = setTimeout(() => applyIsoFromHud(Number(els.hudIsoRange.value)), 160);
   });
-  els.hudIsoRange.addEventListener('change', () => applyIsoFromHud(Number(els.hudIsoRange.value)));
+  els.hudIsoRange.addEventListener('change', () => {
+    clearTimeout(isoDebounceTimer);
+    applyIsoFromHud(Number(els.hudIsoRange.value));
+  });
   [els.hudIsoMinus, els.hudIsoPlus].forEach((button, i) => button.addEventListener('click', () => {
     const delta = (i === 0 ? -1 : 1) * Math.max(10, Number(els.hudIsoRange.step) || 1);
     applyIsoFromHud(Number(els.hudIsoRange.value) + delta);
@@ -710,8 +716,13 @@
   });
   els.hudFocusRange.addEventListener('input', () => {
     els.hudValue.textContent = round2(Number(els.hudFocusRange.value)) + ' · pendiente';
+    clearTimeout(focusDebounceTimer);
+    focusDebounceTimer = setTimeout(() => applyFocusFromHud(Number(els.hudFocusRange.value)), 160);
   });
-  els.hudFocusRange.addEventListener('change', () => applyFocusFromHud(Number(els.hudFocusRange.value)));
+  els.hudFocusRange.addEventListener('change', () => {
+    clearTimeout(focusDebounceTimer);
+    applyFocusFromHud(Number(els.hudFocusRange.value));
+  });
   els.focusDistanceRange.addEventListener('change', () => {
     if (!manualFocusDistance) return;
     const requested = Number(els.focusDistanceRange.value);
@@ -745,7 +756,11 @@
   els.closeAdvanced.addEventListener('click', closeAdvanced);
   els.hudClip.addEventListener('click', openClip);
   els.closeClip.addEventListener('click', () => document.body.classList.remove('clip-open'));
-  window.addEventListener('pagehide', () => { if (recorder?.state === 'recording') { try { recorder.stop(); } catch (_) {} } cleanupStream(); });
+  window.addEventListener('pagehide', () => {
+    clearTimeout(isoDebounceTimer); clearTimeout(focusDebounceTimer);
+    if (recorder?.state === 'recording') { try { recorder.stop(); } catch (_) {} }
+    cleanupStream();
+  });
 
   loadSync();
   updateSync();
