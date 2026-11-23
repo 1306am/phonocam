@@ -59,6 +59,11 @@
                   <option value="auto-rear">Trasera automática</option>
                 </select>
                 <p id="lensHint">Buscando cámaras disponibles…</p>
+                <div id="lensZoomGroup" class="lens-zoom" hidden>
+                  <label for="lensZoomRange">ZOOM DISPONIBLE <output id="lensZoomValue">1×</output></label>
+                  <input id="lensZoomRange" type="range" min="1" max="1" step="0.1" value="1" disabled aria-label="Zoom ofrecido por la cámara" />
+                  <p id="lensZoomHint">El alcance de zoom depende de la cámara.</p>
+                </div>
                 <p class="lens-note">El ultra gran angular solo es seleccionable si Chrome lo ofrece como cámara independiente.</p>
               </div>
             </div>
