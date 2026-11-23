@@ -1,4 +1,4 @@
-const CACHE_NAME = 'phonocam-v1';
+const CACHE_NAME = 'phonocam-v2';
 const CORE_FILES = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_FILES)).then(() => self.skipWaiting()));
