@@ -32,7 +32,7 @@
         <section class="camera-panel" aria-label="Cámara de PhonoCam">
           <div class="panel-head">
             <span class="panel-title"><span class="panel-icon">▣</span> MONITOR</span>
-            <div class="panel-head-actions"><span class="state-pill" id="cameraState"><span class="pill-dot"></span> CÁMARA APAGADA</span><button id="focusModeButton" class="focus-toggle" type="button" aria-pressed="false" aria-label="Entrar al modo estudio" title="Cámara fija y controles visibles">⤢</button></div>
+            <div class="panel-head-actions"><button type="button" id="presentDesktop" class="present-desktop" disabled>⛶ PRESENTAR</button><span class="state-pill" id="cameraState"><span class="pill-dot"></span> CÁMARA APAGADA</span><button id="focusModeButton" class="focus-toggle" type="button" aria-pressed="false" aria-label="Entrar al modo estudio" title="Cámara fija y controles visibles">⤢</button></div>
           </div>
           <div class="viewfinder" id="viewfinder">
             <video id="cameraPreview" autoplay muted playsinline aria-label="Vista previa de la cámara"></video>
@@ -88,7 +88,7 @@
                 <button type="button" class="hud-parameter" id="hudFocusTab" aria-pressed="false"><span>FOCUS</span><strong id="hudFocusLabel">—</strong></button>
               </div>
               <div class="hud-actions">
-                <button type="button" class="hud-tool hud-present" id="hudPresent" aria-label="Presentar cámara en pantalla completa" title="Presentar cámara sin controles">⛶</button>
+                <button type="button" class="hud-tool hud-present" id="hudPresent" aria-label="Presentar cámara en pantalla completa" title="Presentar cámara sin controles">⛶ PRES</button>
                 <button type="button" class="hud-tool" id="hudSwapCamera" aria-label="Cambiar cámara" title="Cambiar cámara">⇄</button>
                 <button type="button" class="hud-tool hud-fit" id="hudFit" aria-label="Cambiar vista FIT o FILL" title="Alternar FIT/FILL">FIT</button>
                 <button type="button" class="hud-record" id="hudRecord" aria-label="Iniciar grabación"><span></span></button>
