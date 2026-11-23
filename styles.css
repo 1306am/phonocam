@@ -422,48 +422,6 @@
 }
 
 
-/* PhonoCam v1.0 – uncluttered live projector presentation. */
-.presentation-exit{
-  position:absolute;z-index:110;top:max(14px,env(safe-area-inset-top));right:max(14px,env(safe-area-inset-right));
-  padding:10px 14px;border:1px solid #ffffff55;border-radius:10px;background:#0a0e13b8;color:#fff;
-  font-size:13px;font-weight:750;letter-spacing:.2px;backdrop-filter:blur(10px);
-  opacity:0;pointer-events:none;transition:opacity .25s ease;
-}
-.presentation-exit.is-visible{opacity:1;pointer-events:auto}
-#viewfinder:fullscreen,
-#viewfinder:-webkit-full-screen{
-  position:relative!important;
-  margin:0!important;padding:0!important;width:100vw!important;height:100dvh!important;
-  max-width:none!important;max-height:none!important;min-height:0!important;
-  background:#000!important;overflow:hidden!important;border-radius:0!important;
-}
-#viewfinder:fullscreen > :not(video):not(.presentation-exit),
-#viewfinder:-webkit-full-screen > :not(video):not(.presentation-exit){
-  display:none!important;
-}
-#viewfinder:fullscreen video#cameraPreview,
-#viewfinder:-webkit-full-screen video#cameraPreview{
-  display:block!important;position:absolute!important;inset:0!important;
-  width:100%!important;height:100%!important;object-fit:contain!important;
-  object-position:center center!important;background:#000!important;
-}
-body.presentation-mode .viewfinder:not(:fullscreen){
-  position:fixed!important;inset:0!important;z-index:9999!important;
-  margin:0!important;padding:0!important;width:100vw!important;height:100dvh!important;
-  max-height:100dvh!important;max-width:none!important;min-height:0!important;
-  border:0!important;border-radius:0!important;background:#000!important;overflow:hidden!important;
-}
-body.presentation-mode .viewfinder:not(:fullscreen) > :not(video):not(.presentation-exit){
-  display:none!important;
-}
-body.presentation-mode .viewfinder:not(:fullscreen) video#cameraPreview{
-  position:absolute!important;inset:0!important;display:block!important;
-  width:100%!important;height:100%!important;object-fit:contain!important;
-  object-position:center center!important;background:#000!important;
-}
-body.presentation-mode{overflow:hidden!important;background:#000!important}
-body.studio-mode .hud-present{color:#d8f56a;border-color:#d8f56a}
-
 .present-desktop{border:1px solid #85986f;border-radius:8px;background:#253128;color:#d8f56a;font-size:11px;font-weight:800;letter-spacing:.3px;min-height:32px;padding:5px 9px}
 @media(max-width:960px){
  .present-desktop{display:none}
@@ -475,4 +433,66 @@ body.studio-mode .hud-present{color:#d8f56a;border-color:#d8f56a}
 }
 @media(max-width:380px){
  body.studio-mode .hud-present{width:52px!important;font-size:9px!important}
+}
+
+
+/* PhonoCam v1.1 — hide camera UI IN PLACE, never invoke native fullscreen.
+   Keep the live track and its FIT/FILL setting; reserve one visible restore control. */
+.presentation-exit{
+  position:absolute;z-index:100;top:max(14px,env(safe-area-inset-top));
+  right:max(14px,env(safe-area-inset-right));
+  padding:10px 14px;border:1px solid #a5b2a17a;border-radius:10px;
+  background:#0c1219dc;color:#d8f56a;
+  font-size:12px;font-weight:800;letter-spacing:.2px;
+  box-shadow:0 3px 18px #0009;pointer-events:auto;touch-action:manipulation;
+}
+.presentation-exit.is-visible{display:block;opacity:1}
+body.presentation-mode{overflow:hidden!important;background:#000!important}
+body.presentation-mode .topbar,
+body.presentation-mode .intro,
+body.presentation-mode footer,
+body.presentation-mode .camera-panel>.panel-head,
+body.presentation-mode .viewfinder-top,
+body.presentation-mode .viewfinder-bottom,
+body.presentation-mode .camera-hud,
+body.presentation-mode .camera-toolbar,
+body.presentation-mode .status-line,
+body.presentation-mode .clip-panel,
+body.presentation-mode .settings-panel{display:none!important}
+body.presentation-mode .shell{
+  display:flex!important;flex-direction:column!important;
+  width:100%!important;max-width:none!important;
+  height:100dvh!important;min-height:0!important;
+  margin:0!important;padding:0!important;
+}
+body.presentation-mode main{
+  display:flex!important;flex:1 1 0!important;width:100%!important;
+  min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important;
+}
+body.presentation-mode .workspace{
+  display:flex!important;flex:1 1 0!important;flex-direction:column!important;
+  align-items:stretch!important;gap:0!important;min-width:0!important;
+  min-height:0!important;max-width:none!important;
+}
+body.presentation-mode .camera-panel{
+  display:flex!important;flex-direction:column!important;flex:1 1 0!important;
+  align-self:stretch!important;width:100%!important;min-width:0!important;
+  min-height:0!important;max-width:none!important;border:0!important;
+  margin:0!important;border-radius:0!important;overflow:hidden!important;
+}
+body.presentation-mode .camera-panel .viewfinder{
+  position:relative!important;inset:auto!important;display:block!important;
+  flex:1 1 0!important;width:100%!important;height:auto!important;
+  max-width:none!important;max-height:none!important;min-height:0!important;
+  margin:0!important;padding:0!important;border:0!important;border-radius:0!important;
+  background:#000!important;overflow:hidden!important;
+}
+body.presentation-mode .camera-panel .viewfinder video#cameraPreview{
+  display:block!important;position:absolute!important;inset:0!important;
+  width:100%!important;height:100%!important;
+  object-fit:cover!important;object-position:center center!important;
+  background:#000!important;
+}
+body.presentation-mode.fit-frame .camera-panel .viewfinder video#cameraPreview{
+  object-fit:contain!important;
 }
