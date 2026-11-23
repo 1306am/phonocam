@@ -566,3 +566,15 @@ body.presentation-mode.fit-frame .camera-panel .viewfinder video#cameraPreview{
  body.studio-mode .sync-quick-feedback{display:none}
  body.studio-mode .sync-quick{padding:5px 7px;gap:3px}
 }
+
+/* PhonoCam v1.4 — magnified fine-focus range, with hardware-safe full-range toggle. */
+.hud-focus-adjust .focus-range-toggle {
+  flex:0 0 auto;min-height:34px;padding:6px 8px;
+  border:1px solid #758970;border-radius:7px;background:#29373c;
+  color:#d8f56a;font-size:10px;font-weight:850;letter-spacing:.2px;
+  touch-action:manipulation;white-space:nowrap;
+}
+.hud-focus-adjust .focus-range-toggle:disabled{opacity:.38}
+@media(max-width:960px){
+  body.studio-mode .hud-focus-adjust .focus-range-toggle{flex-basis:auto;min-width:49px}
+}
