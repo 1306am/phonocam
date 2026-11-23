@@ -12,6 +12,8 @@
     clipPanel: $('clipPanel'), recordedPreview: $('recordedPreview'), videoFormat: $('videoFormat'),
     downloadVideo: $('downloadVideo'), fpsSelect: $('fpsSelect'), resolutionSelect: $('resolutionSelect'),
     exposureSelect: $('exposureSelect'), isoRange: $('isoRange'), isoValue: $('isoValue'),
+    focusDistanceRow: $('focusDistanceRow'), focusDistanceRange: $('focusDistanceRange'),
+    focusDistanceValue: $('focusDistanceValue'),
     focusSelect: $('focusSelect'), manualBadge: $('manualBadge'), manualNote: $('manualNote'),
     captureTab: $('captureTab'), syncTab: $('syncTab'), capturePanel: $('capturePanel'), syncPanel: $('syncPanel'),
     rpmSelect: $('rpmSelect'), customRpm: $('customRpm'), customRpmRow: $('customRpmRow'),
@@ -21,7 +23,9 @@
     fpsRange: $('fpsRange'), fpsRangeValue: $('fpsRangeValue'), focusModeButton: $('focusModeButton'),
     cameraHud: $('cameraHud'), hudTitle: $('hudTitle'), hudValue: $('hudValue'),
     hudHint: $('hudHint'), hudFpsRange: $('hudFpsRange'), hudShutterSelect: $('hudShutterSelect'),
-    hudIsoRange: $('hudIsoRange'), hudFocusSelect: $('hudFocusSelect'),
+    hudIsoRange: $('hudIsoRange'), hudIsoControls: $('hudIsoControls'),
+    hudIsoMinus: $('hudIsoMinus'), hudIsoPlus: $('hudIsoPlus'), hudIsoRangeToggle: $('hudIsoRangeToggle'),
+    hudFocusSelect: $('hudFocusSelect'), hudFocusControls: $('hudFocusControls'), hudFocusRange: $('hudFocusRange'),
     hudFpsTab: $('hudFpsTab'), hudShutterTab: $('hudShutterTab'), hudIsoTab: $('hudIsoTab'),
     hudFocusTab: $('hudFocusTab'), hudFpsLabel: $('hudFpsLabel'), hudShutterLabel: $('hudShutterLabel'),
     hudIsoLabel: $('hudIsoLabel'), hudFocusLabel: $('hudFocusLabel'),
@@ -33,6 +37,8 @@
   let studioMode = false;
   let hudMode = 'fps';
   let fitFrame = false;
+  let isoFineMode = true;
+  let manualFocusDistance = false;
   function setStudioMode(enabled) {
     studioMode = enabled;
     document.body.classList.toggle('studio-mode', enabled);
@@ -72,6 +78,77 @@
   function isNumberRange(obj) { return obj && Number.isFinite(obj.min) && Number.isFinite(obj.max); }
 
 
+  // A narrow ISO working window makes adjustments practical for phonotropes.
+  // Changing the slider's range alone never changes the camera exposure.
+  function snapRange(value, range, step) {
+    const min = Number(range.min), max = Number(range.max);
+    const unit = Number(step) > 0 ? Number(step) : 1;
+    return round2(clamp(min + Math.round((clamp(value, min, max) - min) / unit) * unit, min, max));
+  }
+
+  function configureHudIsoRange() {
+    const cap = currentCapabilities.iso;
+    const range = els.hudIsoRange;
+    if (!isNumberRange(cap) || els.isoRange.disabled) {
+      range.disabled = true;
+      els.hudIsoRangeToggle.disabled = true;
+      return;
+    }
+    const actual = videoTrack?.getSettings?.() || {};
+    const current = Number.isFinite(actual.iso) ? actual.iso : Number(els.isoRange.value);
+    const extent = cap.max - cap.min;
+    let low = cap.min, high = cap.max;
+    if (isoFineMode && extent > 300) {
+      const preferredHigh = Math.min(cap.max, Math.max(400, cap.min + 300));
+      if (current <= preferredHigh) {
+        high = preferredHigh;
+      } else {
+        low = Math.max(cap.min, current - 150);
+        high = Math.min(cap.max, low + 300);
+        low = Math.max(cap.min, high - 300);
+      }
+    }
+    range.min = String(low);
+    range.max = String(high);
+    range.step = els.isoRange.step;
+    range.value = String(snapRange(current, range, Number(range.step)));
+    range.disabled = false;
+    els.hudIsoRangeToggle.disabled = false;
+    els.hudIsoRangeToggle.textContent = isoFineMode ? 'FINO' : 'AMPLIO';
+    els.hudIsoRangeToggle.title = `ISO visible: ${Math.round(low)}–${Math.round(high)}. Toca para ${isoFineMode ? 'ampliar' : 'reducir'} el rango.`;
+    els.hudIsoRangeToggle.setAttribute('aria-label', els.hudIsoRangeToggle.title);
+  }
+
+  function applyIsoFromHud(value) {
+    if (els.hudIsoRange.disabled || recorder?.state === 'recording') return;
+    const rounded = snapRange(value, els.hudIsoRange, els.hudIsoRange.step);
+    els.hudIsoRange.value = String(rounded);
+    els.isoRange.value = String(rounded);
+    els.isoRange.dispatchEvent(new Event('change'));
+    els.hudValue.textContent = Math.round(rounded) + ' · solicitado';
+  }
+
+  function updateFocusDistanceReadout() {
+    if (!manualFocusDistance) return;
+    const current = videoTrack?.getSettings?.() || {};
+    if (Number.isFinite(current.focusDistance)) {
+      els.focusDistanceRange.value = String(current.focusDistance);
+      els.focusDistanceValue.textContent = round2(current.focusDistance) + ' (real)';
+    } else {
+      els.focusDistanceValue.textContent = 'sin verificar';
+    }
+  }
+
+  function applyFocusFromHud(value) {
+    if (!manualFocusDistance || els.hudFocusRange.disabled || recorder?.state === 'recording') return;
+    const rounded = snapRange(value, els.hudFocusRange, els.hudFocusRange.step);
+    els.hudFocusRange.value = String(rounded);
+    els.focusDistanceRange.value = String(rounded);
+    els.hudValue.textContent = round2(rounded) + ' · solicitado';
+    applyManual({focusMode:'manual',focusDistance:rounded}, 'focusDistance', rounded)
+      .then(() => { updateFocusDistanceReadout(); renderHud(); });
+  }
+
   // Overlay controls mirror the same native browser constraints as the full settings.
   // The HUD overlays the preview only; none of these elements are written to the video file.
   function mirrorOptions(source, destination) {
@@ -91,21 +168,30 @@
     mirrorOptions(els.focusSelect, els.hudFocusSelect);
     els.hudShutterSelect.disabled = recording || els.exposureSelect.disabled;
     els.hudFocusSelect.disabled = recording || els.focusSelect.disabled;
-    els.hudIsoRange.min = els.isoRange.min;
-    els.hudIsoRange.max = els.isoRange.max;
-    els.hudIsoRange.step = els.isoRange.step;
-    els.hudIsoRange.value = els.isoRange.value;
+    configureHudIsoRange();
     els.hudIsoRange.disabled = recording || els.isoRange.disabled;
+    els.hudIsoMinus.disabled = els.hudIsoRange.disabled;
+    els.hudIsoPlus.disabled = els.hudIsoRange.disabled;
+    els.hudIsoRangeToggle.disabled = recording || els.isoRange.disabled;
+    els.hudFocusRange.min = els.focusDistanceRange.min;
+    els.hudFocusRange.max = els.focusDistanceRange.max;
+    els.hudFocusRange.step = els.focusDistanceRange.step;
+    els.hudFocusRange.value = els.focusDistanceRange.value;
+    els.hudFocusRange.disabled = recording || !manualFocusDistance;
+    els.hudFocusRange.hidden = !manualFocusDistance;
+    els.hudFocusSelect.hidden = manualFocusDistance;
     els.hudShutterLabel.textContent = els.exposureSelect.disabled ? '—'
       : (els.exposureSelect.value ? '1/' + els.exposureSelect.value : 'SET');
     els.hudIsoLabel.textContent = els.isoRange.disabled ? '—'
       : (els.isoValue.textContent === 'sin verificar' ? '?' : els.isoRange.value);
     const focusLabels = { continuous: 'AUTO', 'single-shot': 'SINGLE', manual: 'LOCK' };
-    els.hudFocusLabel.textContent = els.focusSelect.disabled ? '—'
-      : (focusLabels[els.focusSelect.value] || 'SET');
+    els.hudFocusLabel.textContent = manualFocusDistance
+      ? (Number.isFinite(videoTrack?.getSettings?.()?.focusDistance)
+          ? round2(videoTrack.getSettings().focusDistance) : 'MAN')
+      : (els.focusSelect.disabled ? '—' : (focusLabels[els.focusSelect.value] || 'SET'));
     els.hudShutterTab.classList.toggle('is-unavailable', els.exposureSelect.disabled);
     els.hudIsoTab.classList.toggle('is-unavailable', els.isoRange.disabled);
-    els.hudFocusTab.classList.toggle('is-unavailable', els.focusSelect.disabled);
+    els.hudFocusTab.classList.toggle('is-unavailable', !manualFocusDistance && els.focusSelect.disabled);
     els.hudRecord.classList.toggle('is-recording', recording);
     els.hudRecord.disabled = !stream || els.recordButton.disabled;
     els.hudRecord.setAttribute('aria-label', recording ? 'Detener grabación' : 'Iniciar grabación');
@@ -121,8 +207,8 @@
     const config = {
       fps: { tab: els.hudFpsTab, input: els.hudFpsRange, name: 'FRAME RATE', label: els.hudFpsLabel },
       shutter: { tab: els.hudShutterTab, input: els.hudShutterSelect, name: 'SHUTTER / EXPOSURE', label: els.hudShutterLabel },
-      iso: { tab: els.hudIsoTab, input: els.hudIsoRange, name: 'ISO', label: els.hudIsoLabel },
-      focus: { tab: els.hudFocusTab, input: els.hudFocusSelect, name: 'FOCUS MODE', label: els.hudFocusLabel }
+      iso: { tab: els.hudIsoTab, input: els.hudIsoControls, control: els.hudIsoRange, name: 'ISO · AJUSTE FINO', label: els.hudIsoLabel },
+      focus: { tab: els.hudFocusTab, input: els.hudFocusControls, control: manualFocusDistance ? els.hudFocusRange : els.hudFocusSelect, name: manualFocusDistance ? 'FOCUS · DISTANCIA MANUAL' : 'FOCUS MODE', label: els.hudFocusLabel }
     };
     Object.entries(config).forEach(([key, item]) => {
       const active = key === hudMode;
@@ -132,13 +218,17 @@
     });
     const active = config[hudMode];
     els.hudTitle.textContent = active.name;
-    const isUnavailable = active.input.disabled;
+    const isUnavailable = (active.control || active.input).disabled;
     els.hudValue.textContent = isUnavailable ? 'NO DISPONIBLE'
       : hudMode === 'fps' ? active.label.textContent + ' FPS' : active.label.textContent;
     els.hudHint.textContent = recorder?.state === 'recording'
       ? 'Detén la grabación para cambiar estos parámetros.'
       : isUnavailable && hudMode !== 'fps'
         ? 'Tu navegador no permite ajustar este parámetro manualmente.'
+        : hudMode === 'focus' && manualFocusDistance
+          ? 'Mueve el slider con el disco DETENIDO y comprueba el enfoque. El valor depende del teléfono.'
+        : hudMode === 'iso'
+          ? 'Ajustes precisos. FINO/AMPLIO cambia solamente el rango visible, no el ISO de la cámara.'
         : hudMode === 'fps'
           ? 'FPS solicitados. Desliza y suelta; comprueba el valor real en LIVE.'
           : 'Ajuste solicitado a la cámara. Comprueba la confirmación debajo del visor.';
@@ -212,6 +302,10 @@
     els.exposureSelect.disabled = true;
     els.isoRange.disabled = true;
     els.focusSelect.disabled = true;
+    manualFocusDistance = false;
+    els.focusDistanceRow.hidden = true;
+    els.focusDistanceRange.disabled = true;
+    els.focusDistanceValue.textContent = '—';
     els.isoValue.textContent = '—';
     els.manualBadge.textContent = 'NO DETECTADO';
     els.manualBadge.classList.remove('supported');
@@ -246,7 +340,7 @@
       els.isoRange.step = String(cap.iso.step > 0 ? cap.iso.step : 1);
       const settings = videoTrack.getSettings?.() || {};
       els.isoRange.value = String(clamp(settings.iso ?? cap.iso.min, cap.iso.min, cap.iso.max));
-      els.isoValue.textContent = settings.iso ? String(settings.iso) : 'sin verificar';
+      els.isoValue.textContent = Number.isFinite(settings.iso) ? String(settings.iso) : 'sin verificar';
       els.isoRange.disabled = false;
       controls++;
     }
@@ -257,6 +351,22 @@
         els.focusSelect.add(new Option(labels[mode] || mode, mode));
       });
       els.focusSelect.disabled = false;
+      controls++;
+    }
+
+    if (Array.isArray(cap.focusMode) && cap.focusMode.includes('manual') &&
+        isNumberRange(cap.focusDistance) && cap.focusDistance.max > cap.focusDistance.min) {
+      manualFocusDistance = true;
+      const focus = els.focusDistanceRange;
+      focus.min = String(cap.focusDistance.min);
+      focus.max = String(cap.focusDistance.max);
+      focus.step = String(cap.focusDistance.step > 0 ? cap.focusDistance.step : (cap.focusDistance.max - cap.focusDistance.min) / 100);
+      const settings = videoTrack.getSettings?.() || {};
+      focus.value = String(clamp(Number.isFinite(settings.focusDistance) ? settings.focusDistance
+        : (cap.focusDistance.min + cap.focusDistance.max) / 2, cap.focusDistance.min, cap.focusDistance.max));
+      focus.disabled = false;
+      els.focusDistanceRow.hidden = false;
+      updateFocusDistanceReadout();
       controls++;
     }
 
@@ -585,13 +695,28 @@
     renderHud();
   });
   els.hudIsoRange.addEventListener('input', () => {
-    els.hudValue.textContent = els.hudIsoRange.value + ' · pendiente';
-    els.hudIsoLabel.textContent = els.hudIsoRange.value;
+    els.hudValue.textContent = Math.round(Number(els.hudIsoRange.value)) + ' · pendiente';
   });
-  els.hudIsoRange.addEventListener('change', () => {
-    els.isoRange.value = els.hudIsoRange.value;
-    els.isoRange.dispatchEvent(new Event('change'));
+  els.hudIsoRange.addEventListener('change', () => applyIsoFromHud(Number(els.hudIsoRange.value)));
+  [els.hudIsoMinus, els.hudIsoPlus].forEach((button, i) => button.addEventListener('click', () => {
+    const delta = (i === 0 ? -1 : 1) * Math.max(10, Number(els.hudIsoRange.step) || 1);
+    applyIsoFromHud(Number(els.hudIsoRange.value) + delta);
+  }));
+  els.hudIsoRangeToggle.addEventListener('click', () => {
+    isoFineMode = !isoFineMode;
+    configureHudIsoRange();
     renderHud();
+    status(isoFineMode ? 'ISO: rango fino activo.' : 'ISO: rango completo activo.');
+  });
+  els.hudFocusRange.addEventListener('input', () => {
+    els.hudValue.textContent = round2(Number(els.hudFocusRange.value)) + ' · pendiente';
+  });
+  els.hudFocusRange.addEventListener('change', () => applyFocusFromHud(Number(els.hudFocusRange.value)));
+  els.focusDistanceRange.addEventListener('change', () => {
+    if (!manualFocusDistance) return;
+    const requested = Number(els.focusDistanceRange.value);
+    applyManual({focusMode:'manual',focusDistance:requested}, 'focusDistance', requested)
+      .then(() => {updateFocusDistanceReadout();renderHud();});
   });
   els.hudFocusSelect.addEventListener('change', () => {
     els.focusSelect.value = els.hudFocusSelect.value;
