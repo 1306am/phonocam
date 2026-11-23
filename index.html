@@ -7,7 +7,7 @@
   <meta name="description" content="PhonoCam: cámara experimental y calculadora de sincronización para phonotropes." />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="./styles.css?v=0.8" />
+  <link rel="stylesheet" href="./styles.css?v=0.9" />
   <title>PhonoCam — Capture motion</title>
 </head>
 <body>
@@ -16,7 +16,7 @@
       <a class="brand" href="./" aria-label="PhonoCam, inicio">
         <span class="brand-icon" aria-hidden="true">◉</span>
         <span>PHONO<span class="brand-accent">CAM</span></span>
-        <span class="brand-version">v0.8</span>
+        <span class="brand-version">v0.9</span>
       </a>
       <span class="topbar-right"><span class="version">FIELD LAB</span><span class="top-dot"></span></span>
     </header>
@@ -50,9 +50,27 @@
               <div class="disc-guide"><div class="disc-inner"></div><div class="guide-center"></div><div class="guide-tick top"></div><div class="guide-tick bottom"></div><div class="guide-tick left"></div><div class="guide-tick right"></div></div>
               <div class="axis horizontal"></div><div class="axis vertical"></div>
             </div>
+            <div class="safe-disc-guide" id="safeDiscGuide" hidden aria-hidden="true">
+              <div class="safe-disc-circle" id="safeDiscCircle">
+                <span class="safe-disc-ring-label">SAFE DISC</span>
+                <span class="safe-disc-center">+</span>
+              </div>
+            </div>
             <div class="viewfinder-bottom" id="viewfinderBottom" hidden><span id="cameraHint">Modo cámara</span><span>PHONOCAM © LAB</span></div>
             <div class="lens-tool" id="lensTool" hidden>
-              <button type="button" id="lensButton" class="lens-button" aria-expanded="false" aria-controls="lensMenu">LENTES <span aria-hidden="true">⌄</span></button>
+              <div class="lens-shortcuts">
+                <button type="button" id="fullDiscButton" class="full-disc-button" aria-pressed="false">◎ FULL DISC</button>
+                <button type="button" id="lensButton" class="lens-button" aria-expanded="false" aria-controls="lensMenu">LENTES <span aria-hidden="true">⌄</span></button>
+              </div>
+              <div id="fullDiscMenu" class="full-disc-menu" hidden>
+                <label for="safeMarginSelect">MARGEN DEL DISCO</label>
+                <select id="safeMarginSelect">
+                  <option value="5">5% · Ajustado</option>
+                  <option value="8" selected>8% · Recomendado</option>
+                  <option value="12">12% · Amplio</option>
+                </select>
+                <p id="safeDiscNotice">Guía visual manual: centra el disco dentro del círculo. La app todavía no detecta sus bordes automáticamente.</p>
+              </div>
               <div id="lensMenu" class="lens-menu" hidden>
                 <label for="lensSelect">CÁMARA / LENTE</label>
                 <select id="lensSelect" aria-label="Seleccionar cámara o lente">
@@ -109,7 +127,7 @@
               <div class="hud-actions">
                 <button type="button" class="hud-tool" id="hudGuides" aria-label="Mostrar u ocultar guías" title="Guías">◎</button>
                 <button type="button" class="hud-tool" id="hudSwapCamera" aria-label="Cambiar cámara" title="Cambiar cámara">⇄</button>
-                <button type="button" class="hud-tool hud-fit" id="hudFit" aria-label="Ver encuadre completo" title="Ver encuadre completo">FILL</button>
+                <button type="button" class="hud-tool hud-fit" id="hudFit" aria-label="Cambiar vista FIT o FILL" title="Alternar FIT/FILL">FIT</button>
                 <button type="button" class="hud-record" id="hudRecord" aria-label="Iniciar grabación"><span></span></button>
                 <button type="button" class="hud-tool hud-clip-tool" id="hudClip" hidden aria-label="Ver y guardar último video" title="Ver y guardar último video">↓ VIDEO</button>
                 <button type="button" class="hud-tool" id="hudAdvanced" aria-label="Abrir ajustes avanzados" aria-expanded="false" title="Ajustes avanzados">☷</button>
@@ -168,6 +186,6 @@
       <footer><span>PHONOCAM / OPEN EXPERIMENTAL TOOLS</span><span>CAPTURE IS LOCAL. KEEP MOVING.</span></footer>
     </main>
   </div>
-  <script src="./app.js?v=0.8" defer></script>
+  <script src="./app.js?v=0.9" defer></script>
 </body>
 </html>
