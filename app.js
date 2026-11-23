@@ -11,6 +11,7 @@
     recordButton: $('recordButton'), recState: $('recState'), recTimer: $('recTimer'),
     clipPanel: $('clipPanel'), recordedPreview: $('recordedPreview'), videoFormat: $('videoFormat'),
     downloadVideo: $('downloadVideo'), fpsSelect: $('fpsSelect'), resolutionSelect: $('resolutionSelect'),
+    qualitySelect: $('qualitySelect'), recordDiagnostics: $('recordDiagnostics'),
     exposureSelect: $('exposureSelect'), isoRange: $('isoRange'), isoValue: $('isoValue'),
     focusDistanceRow: $('focusDistanceRow'), focusDistanceRange: $('focusDistanceRange'),
     focusDistanceValue: $('focusDistanceValue'),
@@ -38,7 +39,25 @@
     hudClip: $('hudClip'), hudAdvanced: $('hudAdvanced'), hudPower: $('hudPower'),
     closeAdvanced: $('closeAdvanced'), closeClip: $('closeClip'),
   };
-  const supportedFps = [12, 15, 24, 25, 30, 60];
+  const fpsMin=12, fpsMax=60, fpsStep=0.5;
+  const qualityValues=[8000000,20000000,40000000];
+  function cleanFps(value){return Math.round(Math.min(fpsMax,Math.max(fpsMin,Number(value)||24))/fpsStep)*fpsStep;}
+  function fpsLabel(v){return Number(v).toFixed(1).replace(/\.0$/,'');}
+  function requestedFps(){return cleanFps(els.fpsSelect.value);}
+  function setRequestedFps(v){
+    const fps=cleanFps(v);
+    els.fpsSelect.value=String(fps);
+    els.fpsRange.value=String(fps);
+    els.hudFpsRange.value=String(fps);
+    els.fpsRangeValue.textContent=fpsLabel(fps)+' FPS';
+    els.hudFpsLabel.textContent=fpsLabel(fps);
+    els.hudValue.textContent=fpsLabel(fps)+' FPS';
+    return fps;
+  }
+  function selectedQuality(){
+    const v=Number(els.qualitySelect.value);
+    return qualityValues.includes(v)?v:20000000;
+  }
   let studioMode = false;
   let hudMode = 'fps';
   let fitFrame=true, isoFineMode=true, manualFocusDistance=false;
@@ -85,16 +104,13 @@
     const studioStatus = document.getElementById('studioStatus');
     if (studioStatus) studioStatus.textContent = enabled ? 'STUDIO MODE · LIVE' : 'PHONOTROPE MODE';
   }
-  function syncFpsControls() {
-    const idx = supportedFps.indexOf(Number(els.fpsSelect.value));
-    if (idx >= 0) {
-      els.fpsRange.value = String(idx);
-      els.fpsRangeValue.textContent = supportedFps[idx] + ' FPS';
-      renderHud();
-    }
+  function syncFpsControls(){
+    setRequestedFps(els.fpsSelect.value);
+    renderHud();
   }
   let stream = null, videoTrack = null, facingMode = 'environment';
   let recorder = null, parts = [], recordingStarted = 0, timerId = null, videoUrl = null;
+  let recordedConfig=null;
   let busy = false, currentCapabilities = {};
   let syncRecommendation = 24;
   const presets = [30,40,50,60,80,100,125,160,200,250,320,400,500,640,800,1000,1250,1600,2000,2500,3200,4000,5000,6400,8000];
@@ -217,13 +233,12 @@
 
   function renderHud() {
     const recording = recorder?.state === 'recording';
-    const fps = Number(els.fpsSelect.value);
-    const i = supportedFps.indexOf(fps);
-    if (i >= 0) els.hudFpsRange.value = String(i);
+    const fps = requestedFps();
+    els.hudFpsRange.value = String(fps);
     els.hudFpsRange.disabled = recording || !stream;
     els.hudFpsMinus.disabled = els.hudFpsRange.disabled;
     els.hudFpsPlus.disabled = els.hudFpsRange.disabled;
-    els.hudFpsLabel.textContent = String(fps);
+    els.hudFpsLabel.textContent = fpsLabel(fps);
     mirrorOptions(els.exposureSelect, els.hudShutterSelect);
     updateShutterSlider();
     mirrorOptions(els.focusSelect, els.hudFocusSelect);
@@ -478,7 +493,7 @@
     els.startCamera.disabled = true;
     status('Solicitando permiso para utilizar la cámara…');
     const [width, height] = els.resolutionSelect.value.split('x').map(Number);
-    const video={facingMode:{ideal:facingMode},width:{ideal:width},height:{ideal:height},frameRate:{ideal:Number(els.fpsSelect.value)}};
+    const video={facingMode:{ideal:facingMode},width:{ideal:width},height:{ideal:height},frameRate:{ideal:requestedFps()}};
     try {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
@@ -525,7 +540,7 @@
   async function applyCaptureSettings() {
     if (!videoTrack || recorder?.state === 'recording') return;
     const [width, height] = els.resolutionSelect.value.split('x').map(Number);
-    const frameRate = Number(els.fpsSelect.value);
+    const frameRate = requestedFps();
     try {
       await videoTrack.applyConstraints({ width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: frameRate } });
       const actual = updateActualSettings() || {};
@@ -560,9 +575,16 @@
     const requestedMime = chooseMimeType();
     try {
       // Let the browser choose a supported format when isTypeSupported cannot identify one.
+      const quality=selectedQuality();
       recorder = new MediaRecorder(stream, requestedMime
-        ? { mimeType: requestedMime, videoBitsPerSecond: 8000000 }
-        : { videoBitsPerSecond: 8000000 });
+        ? { mimeType: requestedMime, videoBitsPerSecond: quality }
+        : { videoBitsPerSecond: quality });
+      const actual=videoTrack?.getSettings?.()||{};
+      recordedConfig={
+        requestedMbps:quality/1000000, reportedMbps:Number.isFinite(recorder.videoBitsPerSecond)?recorder.videoBitsPerSecond/1000000:null,
+        reportedWidth:actual.width,reportedHeight:actual.height,reportedFps:actual.frameRate,
+        requestedFps:requestedFps(),codec:recorder.mimeType||requestedMime||'Navegador'
+      };
       parts = [];
       recorder.ondataavailable = (event) => { if (event.data && event.data.size > 0) parts.push(event.data); };
       recorder.onerror = (event) => { status(`Problema durante la grabación: ${event.error?.message || 'error desconocido'}`, 'error'); };
@@ -578,6 +600,7 @@
       els.switchCamera.disabled = true;
       els.fpsSelect.disabled = true;
       els.resolutionSelect.disabled = true;
+      els.qualitySelect.disabled = true;
       els.exposureSelect.disabled = true;
       els.isoRange.disabled = true;
       els.focusSelect.disabled = true;
@@ -608,6 +631,7 @@
     els.switchCamera.disabled = !stream;
     els.fpsSelect.disabled = false;
     els.resolutionSelect.disabled = false;
+    els.qualitySelect.disabled = false;
     setupManualControls();
     if (!parts.length) { renderHud(); status('No se recibieron datos de video; intenta una grabación más larga.', 'error'); return; }
     const type = recorder.mimeType || parts[0].type || 'video/webm';
@@ -618,6 +642,18 @@
     videoUrl = URL.createObjectURL(blob);
     els.recordedPreview.src = videoUrl;
     els.videoFormat.textContent = `${extension.toUpperCase()} · ${(blob.size / (1024 * 1024)).toFixed(1)} MB`;
+    const cfg=recordedConfig||{};
+    const elapsedSeconds=(Date.now()-recordingStarted)/1000;
+    const measuredMbps=elapsedSeconds>0?blob.size*8/elapsedSeconds/1000000:0;
+    const dimensions=cfg.reportedWidth&&cfg.reportedHeight?cfg.reportedWidth+'×'+cfg.reportedHeight:'No informado';
+    const reportedFps=Number.isFinite(cfg.reportedFps)?fpsLabel(cfg.reportedFps):'No informado';
+    const encoderMbps=Number.isFinite(cfg.reportedMbps)?cfg.reportedMbps.toFixed(1)+' Mbps':'No informado';
+    els.recordDiagnostics.textContent=
+      'Video: '+dimensions+' · FPS solicitados '+fpsLabel(cfg.requestedFps||requestedFps())+
+      ' / reportados '+reportedFps+' · Bitrate solicitado '+(cfg.requestedMbps||8)+
+      ' Mbps / encoder reporta '+encoderMbps+
+      ' · Promedio del archivo '+measuredMbps.toFixed(1)+' Mbps · Códec/formato '+(cfg.codec||type)+
+      '. Los valores reportados no garantizan los cuadros efectivos.';
     els.downloadVideo.href = videoUrl;
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     els.downloadVideo.download = `phonocam-${stamp}.${extension}`;
@@ -663,14 +699,14 @@
       return;
     }
     const theoretical = rpm * drawings / (60 * step);
-    syncRecommendation = supportedFps.reduce((best, fps) => Math.abs(fps - theoretical) < Math.abs(best - theoretical) ? fps : best, supportedFps[0]);
+    syncRecommendation = cleanFps(theoretical);
     const deviation = Math.abs(syncRecommendation - theoretical);
     const exact = deviation < 0.015;
     els.idealFps.innerHTML = `${theoretical.toFixed(2)} <small>FPS</small>`;
     els.syncExplain.textContent = `${round2(rpm)} RPM × ${drawings} dibujos ÷ (60 × ${step}) = ${theoretical.toFixed(2)} FPS.`;
     els.fpsSuggestion.textContent = exact
-      ? `${syncRecommendation} FPS coincide con la relación teórica. Pruébalo con un obturador rápido y luz suficiente.`
-      : `El preset disponible más cercano es ${syncRecommendation} FPS (diferencia de ${deviation.toFixed(2)} FPS). Habrá deriva; ajusta las RPM o el número de dibujos.`;
+      ? `${fpsLabel(syncRecommendation)} FPS coincide con la relación teórica. Pruébalo con un obturador rápido y luz suficiente.`
+      : `Puedes solicitar ${fpsLabel(syncRecommendation)} FPS (diferencia teórica ${deviation.toFixed(2)} FPS). El navegador podría redondear el valor; verifica LIVE. Ajusta las RPM si hay deriva.`;
     els.useSyncFps.disabled = false;
     try { localStorage.setItem('phonocam-sync', JSON.stringify({ rpmSelect: els.rpmSelect.value, customRpm: els.customRpm.value, drawings, step })); } catch (_) { /* optional */ }
   }
@@ -698,15 +734,14 @@
   els.recordButton.addEventListener('click', toggleRecording);
   els.captureTab.addEventListener('click', () => changeTab('capture'));
   els.syncTab.addEventListener('click', () => changeTab('sync'));
-  els.fpsSelect.addEventListener('change', () => { syncFpsControls(); applyCaptureSettings(); });
-  els.fpsRange.addEventListener('input', () => {
-    const fps = supportedFps[Number(els.fpsRange.value)];
-    els.fpsRangeValue.textContent = fps + ' FPS';
+  els.fpsSelect.addEventListener('change',()=>{
+    syncFpsControls();applyCaptureSettings();
   });
-  els.fpsRange.addEventListener('change', () => {
-    const fps = supportedFps[Number(els.fpsRange.value)];
-    els.fpsSelect.value = String(fps);
-    syncFpsControls();
+  els.fpsRange.addEventListener('input',()=>{
+    els.fpsRangeValue.textContent=fpsLabel(els.fpsRange.value)+' FPS';
+  });
+  els.fpsRange.addEventListener('change',()=>{
+    setRequestedFps(els.fpsRange.value);
     applyCaptureSettings();
   });
   els.focusModeButton.addEventListener('click', () => setStudioMode(!studioMode));
@@ -746,29 +781,21 @@
     [els.hudIsoTab, 'iso'], [els.hudFocusTab, 'focus']
   ];
   hudModes.forEach(([button, mode]) => button.addEventListener('click', () => showHudMode(mode)));
-  els.hudFpsRange.addEventListener('input', () => {
-    const fps = supportedFps[Number(els.hudFpsRange.value)];
-    els.hudFpsLabel.textContent = String(fps);
-    els.hudValue.textContent = fps + ' FPS · pendiente';
+  els.hudFpsRange.addEventListener('input',()=>{
+    const fps=cleanFps(els.hudFpsRange.value);
+    els.hudFpsLabel.textContent=fpsLabel(fps);
+    els.hudValue.textContent=fpsLabel(fps)+' FPS · pendiente';
   });
-  els.hudFpsRange.addEventListener('change', () => {
-    const fps = supportedFps[Number(els.hudFpsRange.value)];
-    els.fpsSelect.value = String(fps);
-    syncFpsControls();
+  els.hudFpsRange.addEventListener('change',()=>{
+    setRequestedFps(els.hudFpsRange.value);
     applyCaptureSettings();
   });
-  [els.hudFpsMinus, els.hudFpsPlus].forEach((button, index) => {
-    button.addEventListener('click', () => {
-      if (els.hudFpsRange.disabled) return;
-      const oldIndex = Number(els.hudFpsRange.value);
-      const nextIndex = clamp(oldIndex + (index === 0 ? -1 : 1), 0, supportedFps.length - 1);
-      if (nextIndex === oldIndex) return;
-      const fps = supportedFps[nextIndex];
-      els.hudFpsRange.value = String(nextIndex);
-      els.hudFpsLabel.textContent = String(fps);
-      els.fpsSelect.value = String(fps);
-      syncFpsControls();
-      applyCaptureSettings();
+  [els.hudFpsMinus,els.hudFpsPlus].forEach((button,i)=>{
+    button.addEventListener('click',()=>{
+      if(els.hudFpsRange.disabled)return;
+      const previous=requestedFps();
+      const next=setRequestedFps(previous+(i===0?-fpsStep:fpsStep));
+      if(next!==previous)applyCaptureSettings();
     });
   });
   els.hudShutterSelect.addEventListener('change', () => {
