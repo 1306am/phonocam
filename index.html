@@ -7,7 +7,7 @@
   <meta name="description" content="PhonoCam: cámara experimental y calculadora de sincronización para phonotropes." />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="./styles.css?v=0.6" />
+  <link rel="stylesheet" href="./styles.css?v=0.7" />
   <title>PhonoCam — Capture motion</title>
 </head>
 <body>
@@ -16,7 +16,7 @@
       <a class="brand" href="./" aria-label="PhonoCam, inicio">
         <span class="brand-icon" aria-hidden="true">◉</span>
         <span>PHONO<span class="brand-accent">CAM</span></span>
-        <span class="brand-version">v0.6</span>
+        <span class="brand-version">v0.7</span>
       </a>
       <span class="topbar-right"><span class="version">FIELD LAB</span><span class="top-dot"></span></span>
     </header>
@@ -51,6 +51,17 @@
               <div class="axis horizontal"></div><div class="axis vertical"></div>
             </div>
             <div class="viewfinder-bottom" id="viewfinderBottom" hidden><span id="cameraHint">Modo cámara</span><span>PHONOCAM © LAB</span></div>
+            <div class="lens-tool" id="lensTool" hidden>
+              <button type="button" id="lensButton" class="lens-button" aria-expanded="false" aria-controls="lensMenu">LENTES <span aria-hidden="true">⌄</span></button>
+              <div id="lensMenu" class="lens-menu" hidden>
+                <label for="lensSelect">CÁMARA / LENTE</label>
+                <select id="lensSelect" aria-label="Seleccionar cámara o lente">
+                  <option value="auto-rear">Trasera automática</option>
+                </select>
+                <p id="lensHint">Buscando cámaras disponibles…</p>
+                <p class="lens-note">El ultra gran angular solo es seleccionable si Chrome lo ofrece como cámara independiente.</p>
+              </div>
+            </div>
             <!-- Los controles se dibujan SOBRE el video; no forman parte de la grabación. -->
             <div class="camera-hud" id="cameraHud" hidden aria-label="Controles de cámara en vivo">
               <div class="hud-adjust" id="hudAdjust">
@@ -59,7 +70,12 @@
                   <strong id="hudValue">24 FPS</strong>
                 </div>
                 <input id="hudFpsRange" type="range" min="0" max="5" step="1" value="2" aria-label="Ajustar FPS" />
-                <select id="hudShutterSelect" hidden disabled aria-label="Ajustar shutter"><option value="">No disponible</option></select>
+                <div class="hud-precision hud-shutter-controls" id="hudShutterControls" hidden>
+                  <button type="button" class="precision-step" id="hudShutterMinus" disabled aria-label="Shutter más lento">−</button>
+                  <input id="hudShutterRange" type="range" disabled min="0" max="0" step="1" value="0" aria-label="Ajustar shutter con precisión" />
+                  <button type="button" class="precision-step" id="hudShutterPlus" disabled aria-label="Shutter más rápido">+</button>
+                  <select id="hudShutterSelect" hidden disabled aria-label="Seleccionar shutter"><option value="">No disponible</option></select>
+                </div>
                 <div class="hud-precision" id="hudIsoControls" hidden>
                   <button type="button" class="precision-step" id="hudIsoMinus" aria-label="Bajar ISO">−</button>
                   <input id="hudIsoRange" type="range" disabled min="100" max="400" step="10" value="100" aria-label="Ajustar ISO con precisión" />
@@ -140,6 +156,6 @@
       <footer><span>PHONOCAM / OPEN EXPERIMENTAL TOOLS</span><span>CAPTURE IS LOCAL. KEEP MOVING.</span></footer>
     </main>
   </div>
-  <script src="./app.js?v=0.6" defer></script>
+  <script src="./app.js?v=0.7" defer></script>
 </body>
 </html>
