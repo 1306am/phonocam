@@ -43,7 +43,7 @@
   let hudMode = 'fps';
   let fitFrame=true, isoFineMode=true, manualFocusDistance=false;
   let isoDebounceTimer=null,focusDebounceTimer=null,shutterDebounceTimer=null;
-  let shutterSteps=[], presentationMode=false, presentationExitTimer=null;
+  let shutterSteps=[], presentationMode=false;
   function saveFraming(){try{localStorage.setItem('phonocam-framing',JSON.stringify({fitFrame}));}catch(_){}}
   function loadFraming(){try{const p=JSON.parse(localStorage.getItem('phonocam-framing')||'null');if(p&&typeof p.fitFrame==='boolean')fitFrame=p.fitFrame;}catch(_){}}
   function applyFraming(){
@@ -53,30 +53,23 @@
     els.hudFit.setAttribute('aria-label',fitFrame?'Cambiar a FILL':'Cambiar a FIT');
     els.hudFit.title=fitFrame?'Imagen completa':'Llenar visor con recorte visual';
   }
-  function showPresentationExit(){
-    if(!presentationMode)return;
-    els.exitPresentation.hidden=false;
-    els.exitPresentation.classList.add('is-visible');
-    clearTimeout(presentationExitTimer);
-    presentationExitTimer=setTimeout(()=>{if(presentationMode)els.exitPresentation.classList.remove('is-visible');},3500);
-  }
+  // Distraction-free mode stays in the SAME page. No browser Fullscreen API,
+  // no navigation, and no camera/recording restart.
   function setPresentation(active){
     presentationMode=active;
     document.body.classList.toggle('presentation-mode',active);
-    if(active){els.exitPresentation.hidden=false;showPresentationExit();}
-    else{clearTimeout(presentationExitTimer);els.exitPresentation.classList.remove('is-visible');els.exitPresentation.hidden=true;}
+    els.exitPresentation.hidden=!active;
+    els.exitPresentation.classList.toggle('is-visible',active);
+    els.exitPresentation.setAttribute('aria-label', active ? 'Mostrar controles de cámara' : 'Controles visibles');
   }
-  async function leavePresentation(){
+  function leavePresentation(){
     setPresentation(false);
-    if(document.fullscreenElement && document.exitFullscreen)try{await document.exitFullscreen();}catch(_){}
   }
-  async function presentLive(){
-    if(!stream||presentationMode)return;
-    closeAdvanced();document.body.classList.remove('clip-open');
+  function presentLive(){
+    if(!stream || presentationMode)return;
+    closeAdvanced();
+    document.body.classList.remove('clip-open');
     setPresentation(true);
-    const finder=document.getElementById('viewfinder');
-    if(finder.requestFullscreen)try{await finder.requestFullscreen({navigationUI:'hide'});}
-    catch(_){status('El navegador no permitió fullscreen nativo; se usa pantalla completa dentro de la app.','online');}
   }
   function setStudioMode(enabled) {
     studioMode = enabled;
@@ -858,8 +851,6 @@
   els.hudPresent.addEventListener('click',presentLive);
   els.presentDesktop.addEventListener('click',presentLive);
   els.exitPresentation.addEventListener('click',(event)=>{event.stopPropagation?.();leavePresentation();});
-  document.getElementById('viewfinder').addEventListener('click',()=>{if(presentationMode)showPresentationExit();});
-  document.addEventListener('fullscreenchange',()=>{if(presentationMode&&!document.fullscreenElement)setPresentation(false);});
   document.addEventListener('keydown',(event)=>{if(presentationMode&&event.key==='Escape')leavePresentation();});
   els.hudPower.addEventListener('click', stopCamera);
   els.hudAdvanced.addEventListener('click', toggleAdvanced);
@@ -873,7 +864,7 @@
   });
   els.closeClip.addEventListener('click', () => document.body.classList.remove('clip-open'));
   window.addEventListener('pagehide', () => {
-    clearTimeout(isoDebounceTimer);clearTimeout(focusDebounceTimer);clearTimeout(shutterDebounceTimer);clearTimeout(presentationExitTimer);
+    clearTimeout(isoDebounceTimer);clearTimeout(focusDebounceTimer);clearTimeout(shutterDebounceTimer);
     if (recorder?.state === 'recording') { try { recorder.stop(); } catch (_) {} }
     cleanupStream();
   });
