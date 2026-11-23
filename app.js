@@ -20,7 +20,10 @@
     rpmSelect: $('rpmSelect'), customRpm: $('customRpm'), customRpmRow: $('customRpmRow'),
     drawingCount: $('drawingCount'), minusDrawings: $('minusDrawings'), plusDrawings: $('plusDrawings'),
     stepSelect: $('stepSelect'), idealFps: $('idealFps'), syncExplain: $('syncExplain'),
-    fpsSuggestion: $('fpsSuggestion'), useSyncFps: $('useSyncFps'),
+    fpsSuggestion: $('fpsSuggestion'), useSyncFps: $('useSyncFps'), syncApplyFeedback: $('syncApplyFeedback'),
+    quickRpm33: $('quickRpm33'), quickRpm45: $('quickRpm45'), quickRpm78: $('quickRpm78'),
+    quickDrawings: $('quickDrawings'), quickStep: $('quickStep'),
+    quickTarget: $('quickTarget'), quickApply: $('quickApply'), quickFeedback: $('quickFeedback'),
     fpsRange: $('fpsRange'), fpsRangeValue: $('fpsRangeValue'), focusModeButton: $('focusModeButton'),
     cameraHud: $('cameraHud'), hudTitle: $('hudTitle'), hudValue: $('hudValue'),
     hudHint: $('hudHint'), hudFpsRange: $('hudFpsRange'), hudShutterSelect: $('hudShutterSelect'),
@@ -31,7 +34,7 @@
     hudSaveVideo: $('hudSaveVideo'),
     hudIsoRange: $('hudIsoRange'), hudIsoControls: $('hudIsoControls'),
     hudIsoMinus: $('hudIsoMinus'), hudIsoPlus: $('hudIsoPlus'), hudIsoRangeToggle: $('hudIsoRangeToggle'),
-    hudFocusSelect: $('hudFocusSelect'), hudFocusControls: $('hudFocusControls'), hudFocusRange: $('hudFocusRange'),
+    hudFocusSelect: $('hudFocusSelect'), hudFocusControls: $('hudFocusControls'), hudFocusRange: $('hudFocusRange'), hudFocusAuto: $('hudFocusAuto'),
     hudFpsTab: $('hudFpsTab'), hudShutterTab: $('hudShutterTab'), hudIsoTab: $('hudIsoTab'),
     hudFocusTab: $('hudFocusTab'), hudFpsLabel: $('hudFpsLabel'), hudShutterLabel: $('hudShutterLabel'),
     hudIsoLabel: $('hudIsoLabel'), hudFocusLabel: $('hudFocusLabel'),
@@ -112,7 +115,8 @@
   let recorder = null, parts = [], recordingStarted = 0, timerId = null, videoUrl = null;
   let recordedConfig=null;
   let busy = false, currentCapabilities = {};
-  let syncRecommendation = 24;
+  let syncRecommendation = 24, syncTheoretical=24, syncValid=true;
+  let syncApplying=false, focusDistanceUnverified=false;
   const presets = [30,40,50,60,80,100,125,160,200,250,320,400,500,640,800,1000,1250,1600,2000,2500,3200,4000,5000,6400,8000];
 
   function status(message, mode = 'normal') {
@@ -194,7 +198,18 @@
     els.focusDistanceRange.value = String(rounded);
     els.hudValue.textContent = round2(rounded) + ' · solicitado';
     applyManual({focusMode:'manual',focusDistance:rounded}, 'focusDistance', rounded)
-      .then(() => { updateFocusDistanceReadout(); renderHud(); });
+      .then((verified) => {
+        if (!verified) {
+          focusDistanceUnverified=true;
+          manualFocusDistance=false;
+          els.focusDistanceRow.hidden=true;
+          els.focusDistanceRange.disabled=true;
+          status('Enfoque manual no verificable. Slider desactivado; usa AUTO/LOCK si tu cámara lo admite.', 'error');
+        } else {
+          updateFocusDistanceReadout();
+        }
+        renderHud();
+      });
   }
 
 
@@ -259,12 +274,13 @@
     els.hudFocusPlus.hidden = !manualFocusDistance;
     els.hudFocusMinus.disabled = els.hudFocusRange.disabled;
     els.hudFocusPlus.disabled = els.hudFocusRange.disabled;
-    els.hudFocusSelect.hidden = manualFocusDistance;
+    els.hudFocusSelect.hidden = false;
+    els.hudFocusAuto.disabled = recording || !stream || !Array.isArray(currentCapabilities.focusMode) || !currentCapabilities.focusMode.includes('continuous');
     els.hudShutterLabel.textContent = els.exposureSelect.disabled ? '—'
       : (els.exposureSelect.value ? '1/' + els.exposureSelect.value : 'SET');
     els.hudIsoLabel.textContent = els.isoRange.disabled ? '—'
       : (els.isoValue.textContent === 'sin verificar' ? '?' : els.isoRange.value);
-    const focusLabels = { continuous: 'AUTO', 'single-shot': 'SINGLE', manual: 'LOCK' };
+    const focusLabels = { continuous: 'AUTO', 'single-shot': 'SINGLE', manual: 'MAN' };
     els.hudFocusLabel.textContent = manualFocusDistance
       ? (Number.isFinite(videoTrack?.getSettings?.()?.focusDistance)
           ? round2(videoTrack.getSettings().focusDistance) : 'MAN')
@@ -395,6 +411,7 @@
     els.manualBadge.textContent = 'NO DETECTADO';
     els.manualBadge.classList.remove('supported');
     els.manualNote.textContent = 'Este navegador no expone los controles manuales. Prueba otra combinación de teléfono/navegador o utiliza una app nativa.';
+    focusDistanceUnverified=false;
     renderHud();
   }
 
@@ -440,7 +457,7 @@
       controls++;
     }
 
-    if (Array.isArray(cap.focusMode) && cap.focusMode.includes('manual') &&
+    if (!focusDistanceUnverified && Array.isArray(cap.focusMode) && cap.focusMode.includes('manual') &&
         isNumberRange(cap.focusDistance) && cap.focusDistance.max > cap.focusDistance.min) {
       manualFocusDistance = true;
       const focus = els.focusDistanceRange;
@@ -465,22 +482,25 @@
   }
 
   async function applyManual(settings, field, expected) {
-    if (!videoTrack || recorder?.state === 'recording') return;
+    if (!videoTrack || recorder?.state === 'recording') return false;
+    let verified=false;
     try {
       await videoTrack.applyConstraints({ advanced: [settings] });
       const actual = videoTrack.getSettings?.() || {};
       if (actual[field] === undefined) {
         status(`${field}: solicitado, pero el navegador no permite verificar su aplicación.`);
       } else if (typeof expected === 'number' && Math.abs(actual[field] - expected) > Math.max(0.01, expected * 0.03)) {
-        status(`${field}: valor aplicado ${round2(actual[field])}; se solicitó ${round2(expected)}.`, 'error');
+        status(`${field}: valor reportado ${round2(actual[field])}; se solicitó ${round2(expected)}.`, 'error');
       } else if (actual[field] !== expected && typeof expected !== 'number') {
         status(`${field}: el navegador reporta “${actual[field]}”, no “${expected}”.`, 'error');
       } else {
-        status(`${field}: cambio verificado (${actual[field]}).`, 'online');
+        verified=true;
+        status(`${field}: valor confirmado por navegador (${actual[field]}). No garantiza enfoque óptico.`, 'online');
       }
       updateActualSettings();
     } catch (err) { status(`No se pudo aplicar ${field}: ${err.message}`, 'error'); }
     renderHud();
+    return verified;
   }
 
   async function startCamera() {
@@ -538,15 +558,21 @@
   }
 
   async function applyCaptureSettings() {
-    if (!videoTrack || recorder?.state === 'recording') return;
+    if (!videoTrack || recorder?.state === 'recording') return {ok:false,reason:'sin cámara o grabando'};
     const [width, height] = els.resolutionSelect.value.split('x').map(Number);
     const frameRate = requestedFps();
     try {
-      await videoTrack.applyConstraints({ width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: frameRate } });
-      const actual = updateActualSettings() || {};
-      status(`Solicitado ${width}×${height} a ${frameRate} FPS. Real: ${actual.width || '?'}×${actual.height || '?'} a ${actual.frameRate || '?'} FPS.`, 'online');
+      await videoTrack.applyConstraints({width:{ideal:width},height:{ideal:height},frameRate:{ideal:frameRate}});
+      const actual=updateActualSettings()||{};
+      const reported=Number.isFinite(actual.frameRate)?actual.frameRate:null;
+      const accepted=reported!==null && Math.abs(reported-frameRate)<=0.15;
+      status(`FPS solicitados ${fpsLabel(frameRate)}; cámara reporta ${reported===null?'desconocido':fpsLabel(reported)}. ${accepted?'Coinciden.':'No verificado o diferente.'}`,accepted?'online':'error');
       setupManualControls();
-    } catch (err) { status(`El teléfono no aceptó el cambio: ${err.message}`, 'error'); }
+      return {ok:accepted,requested:frameRate,reported};
+    }catch(err){
+      status(`El teléfono no aceptó el cambio: ${err.message}`,'error');
+      return {ok:false,requested:frameRate,reported:null,reason:err.message};
+    }
   }
 
   function chooseMimeType() {
