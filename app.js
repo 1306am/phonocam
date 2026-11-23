@@ -19,12 +19,26 @@
     stepSelect: $('stepSelect'), idealFps: $('idealFps'), syncExplain: $('syncExplain'),
     fpsSuggestion: $('fpsSuggestion'), useSyncFps: $('useSyncFps'),
     fpsRange: $('fpsRange'), fpsRangeValue: $('fpsRangeValue'), focusModeButton: $('focusModeButton'),
+    cameraHud: $('cameraHud'), hudTitle: $('hudTitle'), hudValue: $('hudValue'),
+    hudHint: $('hudHint'), hudFpsRange: $('hudFpsRange'), hudShutterSelect: $('hudShutterSelect'),
+    hudIsoRange: $('hudIsoRange'), hudFocusSelect: $('hudFocusSelect'),
+    hudFpsTab: $('hudFpsTab'), hudShutterTab: $('hudShutterTab'), hudIsoTab: $('hudIsoTab'),
+    hudFocusTab: $('hudFocusTab'), hudFpsLabel: $('hudFpsLabel'), hudShutterLabel: $('hudShutterLabel'),
+    hudIsoLabel: $('hudIsoLabel'), hudFocusLabel: $('hudFocusLabel'),
+    hudGuides: $('hudGuides'), hudSwapCamera: $('hudSwapCamera'), hudRecord: $('hudRecord'),
+    hudClip: $('hudClip'), hudAdvanced: $('hudAdvanced'), hudPower: $('hudPower'),
+    closeAdvanced: $('closeAdvanced'), closeClip: $('closeClip'),
   };
   const supportedFps = [12, 15, 24, 25, 30, 60];
   let studioMode = false;
+  let hudMode = 'fps';
   function setStudioMode(enabled) {
     studioMode = enabled;
     document.body.classList.toggle('studio-mode', enabled);
+    if (!enabled) {
+      document.body.classList.remove('advanced-open', 'clip-open');
+      els.hudAdvanced?.setAttribute('aria-expanded', 'false');
+    }
     els.focusModeButton.setAttribute('aria-pressed', String(enabled));
     els.focusModeButton.setAttribute('aria-label', enabled ? 'Salir del modo estudio' : 'Entrar al modo estudio');
     els.focusModeButton.title = enabled ? 'Volver al diseño completo' : 'Mantener la cámara a la vista';
@@ -37,6 +51,7 @@
     if (idx >= 0) {
       els.fpsRange.value = String(idx);
       els.fpsRangeValue.textContent = supportedFps[idx] + ' FPS';
+      renderHud();
     }
   }
   let stream = null, videoTrack = null, facingMode = 'environment';
@@ -55,12 +70,122 @@
   function round2(num) { return Math.round(num * 100) / 100; }
   function isNumberRange(obj) { return obj && Number.isFinite(obj.min) && Number.isFinite(obj.max); }
 
+
+  // Overlay controls mirror the same native browser constraints as the full settings.
+  // The HUD overlays the preview only; none of these elements are written to the video file.
+  function mirrorOptions(source, destination) {
+    destination.replaceChildren(...Array.from(source.options,
+      (item) => new Option(item.text, item.value, item.defaultSelected, item.selected)));
+    destination.value = source.value;
+  }
+
+  function renderHud() {
+    const recording = recorder?.state === 'recording';
+    const fps = Number(els.fpsSelect.value);
+    const i = supportedFps.indexOf(fps);
+    if (i >= 0) els.hudFpsRange.value = String(i);
+    els.hudFpsRange.disabled = recording || !stream;
+    els.hudFpsLabel.textContent = String(fps);
+    mirrorOptions(els.exposureSelect, els.hudShutterSelect);
+    mirrorOptions(els.focusSelect, els.hudFocusSelect);
+    els.hudShutterSelect.disabled = recording || els.exposureSelect.disabled;
+    els.hudFocusSelect.disabled = recording || els.focusSelect.disabled;
+    els.hudIsoRange.min = els.isoRange.min;
+    els.hudIsoRange.max = els.isoRange.max;
+    els.hudIsoRange.step = els.isoRange.step;
+    els.hudIsoRange.value = els.isoRange.value;
+    els.hudIsoRange.disabled = recording || els.isoRange.disabled;
+    els.hudShutterLabel.textContent = els.exposureSelect.disabled ? '—'
+      : (els.exposureSelect.value ? '1/' + els.exposureSelect.value : 'SET');
+    els.hudIsoLabel.textContent = els.isoRange.disabled ? '—'
+      : (els.isoValue.textContent === 'sin verificar' ? '?' : els.isoRange.value);
+    const focusLabels = { continuous: 'AUTO', 'single-shot': 'SINGLE', manual: 'LOCK' };
+    els.hudFocusLabel.textContent = els.focusSelect.disabled ? '—'
+      : (focusLabels[els.focusSelect.value] || 'SET');
+    els.hudShutterTab.classList.toggle('is-unavailable', els.exposureSelect.disabled);
+    els.hudIsoTab.classList.toggle('is-unavailable', els.isoRange.disabled);
+    els.hudFocusTab.classList.toggle('is-unavailable', els.focusSelect.disabled);
+    els.hudRecord.classList.toggle('is-recording', recording);
+    els.hudRecord.disabled = !stream || els.recordButton.disabled;
+    els.hudRecord.setAttribute('aria-label', recording ? 'Detener grabación' : 'Iniciar grabación');
+    els.hudSwapCamera.disabled = recording || !stream;
+    els.hudPower.disabled = recording || !stream;
+    els.hudAdvanced.disabled = recording;
+    els.hudGuides.classList.toggle('is-active', guideEnabled);
+    els.hudClip.hidden = !videoUrl || recording;
+    updateHudMode();
+  }
+
+  function updateHudMode() {
+    const config = {
+      fps: { tab: els.hudFpsTab, input: els.hudFpsRange, name: 'FRAME RATE', label: els.hudFpsLabel },
+      shutter: { tab: els.hudShutterTab, input: els.hudShutterSelect, name: 'SHUTTER / EXPOSURE', label: els.hudShutterLabel },
+      iso: { tab: els.hudIsoTab, input: els.hudIsoRange, name: 'ISO', label: els.hudIsoLabel },
+      focus: { tab: els.hudFocusTab, input: els.hudFocusSelect, name: 'FOCUS MODE', label: els.hudFocusLabel }
+    };
+    Object.entries(config).forEach(([key, item]) => {
+      const active = key === hudMode;
+      item.tab.classList.toggle('is-selected', active);
+      item.tab.setAttribute('aria-pressed', String(active));
+      item.input.hidden = !active;
+    });
+    const active = config[hudMode];
+    els.hudTitle.textContent = active.name;
+    const isUnavailable = active.input.disabled;
+    els.hudValue.textContent = isUnavailable ? 'NO DISPONIBLE'
+      : hudMode === 'fps' ? active.label.textContent + ' FPS' : active.label.textContent;
+    els.hudHint.textContent = recorder?.state === 'recording'
+      ? 'Detén la grabación para cambiar estos parámetros.'
+      : isUnavailable && hudMode !== 'fps'
+        ? 'Tu navegador no permite ajustar este parámetro manualmente.'
+        : hudMode === 'fps'
+          ? 'FPS solicitados. Desliza y suelta; comprueba el valor real en LIVE.'
+          : 'Ajuste solicitado a la cámara. Comprueba la confirmación debajo del visor.';
+  }
+
+  function showHudMode(which) {
+    hudMode = which;
+    updateHudMode();
+  }
+
+  function closeAdvanced() {
+    document.body.classList.remove('advanced-open');
+    els.hudAdvanced.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleAdvanced() {
+    if (!studioMode) {
+      document.querySelector('.settings-panel')?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    const willOpen = !document.body.classList.contains('advanced-open');
+    document.body.classList.remove('clip-open');
+    document.body.classList.toggle('advanced-open', willOpen);
+    els.hudAdvanced.setAttribute('aria-expanded', String(willOpen));
+  }
+
+  function openClip() {
+    if (!videoUrl) return;
+    if (studioMode) {
+      closeAdvanced();
+      document.body.classList.add('clip-open');
+    } else {
+      els.clipPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
   function setCameraUI(enabled) {
     els.cameraEmpty.hidden = enabled;
     els.cameraPreview.style.display = enabled ? 'block' : 'none';
     els.viewfinderTop.hidden = !enabled;
     els.viewfinderBottom.hidden = !enabled;
     els.guideLayer.hidden = !enabled || !guideEnabled;
+    els.cameraHud.hidden = !enabled;
+    document.body.classList.toggle('camera-live', enabled);
+    if (!enabled) {
+      closeAdvanced();
+      document.body.classList.remove('clip-open');
+    }
     els.recordButton.disabled = !enabled;
     els.stopCamera.disabled = !enabled;
     els.switchCamera.disabled = !enabled;
@@ -68,6 +193,7 @@
     els.cameraState.innerHTML = enabled
       ? '<span class="pill-dot"></span> CÁMARA ACTIVA'
       : '<span class="pill-dot"></span> CÁMARA APAGADA';
+    renderHud();
   }
 
   function updateActualSettings() {
@@ -89,6 +215,7 @@
     els.manualBadge.textContent = 'NO DETECTADO';
     els.manualBadge.classList.remove('supported');
     els.manualNote.textContent = 'Este navegador no expone los controles manuales. Prueba otra combinación de teléfono/navegador o utiliza una app nativa.';
+    renderHud();
   }
 
   function setupManualControls() {
@@ -137,6 +264,7 @@
       els.manualBadge.classList.add('supported');
       els.manualNote.textContent = 'Los ajustes se envían al hardware. Comprueba el mensaje de confirmación: si el navegador no reporta el valor aplicado, no podemos verificar el cambio.';
     }
+    renderHud();
   }
 
   async function applyManual(settings, field, expected) {
@@ -155,6 +283,7 @@
       }
       updateActualSettings();
     } catch (err) { status(`No se pudo aplicar ${field}: ${err.message}`, 'error'); }
+    renderHud();
   }
 
   async function startCamera() {
@@ -267,6 +396,9 @@
       els.exposureSelect.disabled = true;
       els.isoRange.disabled = true;
       els.focusSelect.disabled = true;
+      closeAdvanced();
+      document.body.classList.remove('clip-open');
+      renderHud();
       status('Grabando video localmente…', 'online');
     } catch (err) {
       status(`No se pudo comenzar la grabación: ${err.message}`, 'error');
@@ -276,6 +408,7 @@
   function stopRecording() {
     if (recorder?.state !== 'recording') return;
     els.recordButton.disabled = true;
+    renderHud();
     status('Finalizando archivo de video…');
     try { recorder.stop(); } catch (err) { status(`Error al detener la grabación: ${err.message}`, 'error'); }
   }
@@ -291,7 +424,7 @@
     els.fpsSelect.disabled = false;
     els.resolutionSelect.disabled = false;
     setupManualControls();
-    if (!parts.length) { status('No se recibieron datos de video; intenta una grabación más larga.', 'error'); return; }
+    if (!parts.length) { renderHud(); status('No se recibieron datos de video; intenta una grabación más larga.', 'error'); return; }
     const type = recorder.mimeType || parts[0].type || 'video/webm';
     const isMp4 = type.includes('mp4');
     const extension = isMp4 ? 'mp4' : 'webm';
@@ -304,7 +437,7 @@
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     els.downloadVideo.download = `phonocam-${stamp}.${extension}`;
     els.clipPanel.hidden = false;
-    if (studioMode) setStudioMode(false); // Make the finished clip and download button visible.
+    renderHud(); // Stay in camera mode; the clip is available via the thumbnail button.
     status(`Video preparado (${extension.toUpperCase()}). Pulsa “Descargar video” para guardarlo.`, 'online');
   }
 
@@ -382,6 +515,7 @@
     guideEnabled = !guideEnabled;
     els.toggleGuide.classList.toggle('active', guideEnabled);
     els.guideLayer.hidden = !guideEnabled || !stream;
+    els.hudGuides.classList.toggle('is-active', guideEnabled);
   });
   els.captureTab.addEventListener('click', () => changeTab('capture'));
   els.syncTab.addEventListener('click', () => changeTab('sync'));
@@ -393,6 +527,7 @@
   els.fpsRange.addEventListener('change', () => {
     const fps = supportedFps[Number(els.fpsRange.value)];
     els.fpsSelect.value = String(fps);
+    syncFpsControls();
     applyCaptureSettings();
   });
   els.focusModeButton.addEventListener('click', () => setStudioMode(!studioMode));
@@ -407,6 +542,7 @@
     applyManual({ exposureMode: 'manual', iso: value }, 'iso', value).then(() => {
       const actual = videoTrack?.getSettings?.() || {};
       els.isoValue.textContent = actual.iso === undefined ? 'sin verificar' : actual.iso;
+      renderHud();
     });
   });
   els.focusSelect.addEventListener('change', () => {
@@ -420,9 +556,55 @@
     els.fpsSelect.value = String(syncRecommendation);
     syncFpsControls();
     changeTab('capture');
+    closeAdvanced();
     applyCaptureSettings();
     status(`Preset ${syncRecommendation} FPS seleccionado. Comprueba los FPS reales al activar la cámara.`);
   });
+
+  // Touch controls live in the preview, but use the canonical capture settings.
+  const hudModes = [
+    [els.hudFpsTab, 'fps'], [els.hudShutterTab, 'shutter'],
+    [els.hudIsoTab, 'iso'], [els.hudFocusTab, 'focus']
+  ];
+  hudModes.forEach(([button, mode]) => button.addEventListener('click', () => showHudMode(mode)));
+  els.hudFpsRange.addEventListener('input', () => {
+    const fps = supportedFps[Number(els.hudFpsRange.value)];
+    els.hudFpsLabel.textContent = String(fps);
+    els.hudValue.textContent = fps + ' FPS · pendiente';
+  });
+  els.hudFpsRange.addEventListener('change', () => {
+    const fps = supportedFps[Number(els.hudFpsRange.value)];
+    els.fpsSelect.value = String(fps);
+    syncFpsControls();
+    applyCaptureSettings();
+  });
+  els.hudShutterSelect.addEventListener('change', () => {
+    els.exposureSelect.value = els.hudShutterSelect.value;
+    els.exposureSelect.dispatchEvent(new Event('change'));
+    renderHud();
+  });
+  els.hudIsoRange.addEventListener('input', () => {
+    els.hudValue.textContent = els.hudIsoRange.value + ' · pendiente';
+    els.hudIsoLabel.textContent = els.hudIsoRange.value;
+  });
+  els.hudIsoRange.addEventListener('change', () => {
+    els.isoRange.value = els.hudIsoRange.value;
+    els.isoRange.dispatchEvent(new Event('change'));
+    renderHud();
+  });
+  els.hudFocusSelect.addEventListener('change', () => {
+    els.focusSelect.value = els.hudFocusSelect.value;
+    els.focusSelect.dispatchEvent(new Event('change'));
+    renderHud();
+  });
+  els.hudRecord.addEventListener('click', toggleRecording);
+  els.hudSwapCamera.addEventListener('click', switchCamera);
+  els.hudGuides.addEventListener('click', () => els.toggleGuide.click());
+  els.hudPower.addEventListener('click', stopCamera);
+  els.hudAdvanced.addEventListener('click', toggleAdvanced);
+  els.closeAdvanced.addEventListener('click', closeAdvanced);
+  els.hudClip.addEventListener('click', openClip);
+  els.closeClip.addEventListener('click', () => document.body.classList.remove('clip-open'));
   window.addEventListener('pagehide', () => { if (recorder?.state === 'recording') { try { recorder.stop(); } catch (_) {} } cleanupStream(); });
 
   loadSync();
