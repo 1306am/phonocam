@@ -503,3 +503,66 @@ body.presentation-mode.fit-frame .camera-panel .viewfinder video#cameraPreview{
 @media(max-width:960px){
   body.studio-mode .hud-fps-controls input[type=range]{accent-color:#d8f56a}
 }
+
+
+/* PhonoCam v1.3 — compact, touch-first turntable synchronization above camera controls. */
+.sync-quick{
+  display:flex;flex-direction:column;gap:6px;max-width:100%;
+  padding:9px;border-radius:11px;border:1px solid #94a66d88;
+  background:#0f1b24e8;backdrop-filter:blur(12px);pointer-events:auto;
+}
+.sync-quick-speed,.sync-quick-detail{display:flex;align-items:center;gap:5px;min-width:0}
+.sync-quick-speed .sync-quick-title{flex:0 0 auto;width:46px;color:#c0d0c2;font-size:10px;font-weight:900;letter-spacing:.8px}
+.sync-rpm{
+  flex:1 1 0;min-width:0;min-height:32px;border:1px solid #667567;
+  border-radius:7px;background:#27333c;color:#e3ebe7;
+  font-size:13px;font-weight:850;touch-action:manipulation
+}
+.sync-rpm.is-selected{background:#d8f56a;border-color:#d8f56a;color:#172218}
+.sync-quick-detail label{display:flex;align-items:center;gap:4px;min-width:0;color:#bdc7ba;font-weight:850;font-size:9px;letter-spacing:.3px}
+.sync-quick-drawings{flex:0 0 74px}
+.sync-quick-step{flex:0 0 77px}
+.sync-quick-detail input,.sync-quick-detail select{
+ width:45px;min-width:0;height:31px;padding:3px 4px;
+ border:1px solid #6b7b75;background:#26343d;color:white;
+ border-radius:6px;font-size:12px;font-weight:800;text-align:center;
+}
+.sync-quick-step select{width:44px}
+.sync-quick-result{flex:1 0 auto;text-align:center;color:#d8f56a;font-size:11px;font-weight:850;white-space:nowrap;font-variant-numeric:tabular-nums}
+.sync-quick-apply{
+ flex:0 0 auto;min-height:33px;padding:5px 9px;border-radius:7px;
+ border:1px solid #d8f56a;background:#d8f56a;color:#1b2817;
+ font-size:10px;font-weight:900;letter-spacing:.3px;touch-action:manipulation
+}
+.sync-quick-apply:disabled{opacity:.45}
+.sync-quick-feedback,.sync-apply-feedback{font-size:10px;line-height:1.35;color:#cad4cb;margin:0}
+.sync-apply-feedback{margin-top:8px}
+.hud-focus-adjust .focus-auto{
+  flex:0 0 auto;min-height:34px;padding:5px 8px;border:1px solid #7b9272;
+  border-radius:7px;background:#304032;color:#d8f56a;font-size:11px;font-weight:800;
+  touch-action:manipulation;
+}
+.hud-focus-adjust .focus-auto:disabled{opacity:.38}
+@media(max-width:960px){
+ body.studio-mode .camera-hud:not([hidden]){gap:5px}
+ body.studio-mode .sync-quick{padding:7px 9px;gap:5px}
+ body.studio-mode .sync-rpm{height:34px}
+ body.studio-mode .sync-quick-detail{gap:4px;flex-wrap:wrap}
+ body.studio-mode .sync-quick-detail label{font-size:9px}
+ body.studio-mode .sync-quick-apply{min-height:32px}
+ body.studio-mode .hud-focus-adjust{flex-wrap:wrap}
+ body.studio-mode .hud-focus-adjust select{flex:1 1 110px;min-width:85px}
+ body.studio-mode .hud-focus-adjust input[type=range]{flex:1 1 100px}
+}
+@media(max-width:390px){
+ body.studio-mode .sync-quick-drawings{flex-basis:67px}
+ body.studio-mode .sync-quick-step{flex-basis:65px}
+ body.studio-mode .sync-quick-detail input{width:37px}
+ body.studio-mode .sync-quick-detail select{width:38px}
+ body.studio-mode .sync-quick-result{font-size:10px}
+ body.studio-mode .sync-quick-apply{padding:5px 6px;font-size:9px}
+}
+@media(max-width:960px) and (max-height:620px){
+ body.studio-mode .sync-quick-feedback{display:none}
+ body.studio-mode .sync-quick{padding:5px 7px;gap:3px}
+}
