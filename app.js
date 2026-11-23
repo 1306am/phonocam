@@ -18,8 +18,25 @@
     drawingCount: $('drawingCount'), minusDrawings: $('minusDrawings'), plusDrawings: $('plusDrawings'),
     stepSelect: $('stepSelect'), idealFps: $('idealFps'), syncExplain: $('syncExplain'),
     fpsSuggestion: $('fpsSuggestion'), useSyncFps: $('useSyncFps'),
+    fpsRange: $('fpsRange'), fpsRangeValue: $('fpsRangeValue'), focusModeButton: $('focusModeButton'),
   };
   const supportedFps = [12, 15, 24, 25, 30, 60];
+  let studioMode = false;
+  function setStudioMode(enabled) {
+    studioMode = enabled;
+    document.body.classList.toggle('studio-mode', enabled);
+    els.focusModeButton.setAttribute('aria-pressed', String(enabled));
+    els.focusModeButton.setAttribute('aria-label', enabled ? 'Salir del modo estudio' : 'Entrar al modo estudio');
+    els.focusModeButton.title = enabled ? 'Volver al diseño completo' : 'Mantener la cámara a la vista';
+    els.focusModeButton.textContent = enabled ? '⤡' : '⤢';
+  }
+  function syncFpsControls() {
+    const idx = supportedFps.indexOf(Number(els.fpsSelect.value));
+    if (idx >= 0) {
+      els.fpsRange.value = String(idx);
+      els.fpsRangeValue.textContent = supportedFps[idx] + ' FPS';
+    }
+  }
   let stream = null, videoTrack = null, facingMode = 'environment';
   let recorder = null, parts = [], recordingStarted = 0, timerId = null, videoUrl = null;
   let guideEnabled = true, busy = false, currentCapabilities = {};
@@ -285,6 +302,7 @@
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     els.downloadVideo.download = `phonocam-${stamp}.${extension}`;
     els.clipPanel.hidden = false;
+    if (studioMode) setStudioMode(false); // Make the finished clip and download button visible.
     status(`Video preparado (${extension.toUpperCase()}). Pulsa “Descargar video” para guardarlo.`, 'online');
   }
 
@@ -365,7 +383,17 @@
   });
   els.captureTab.addEventListener('click', () => changeTab('capture'));
   els.syncTab.addEventListener('click', () => changeTab('sync'));
-  els.fpsSelect.addEventListener('change', applyCaptureSettings);
+  els.fpsSelect.addEventListener('change', () => { syncFpsControls(); applyCaptureSettings(); });
+  els.fpsRange.addEventListener('input', () => {
+    const fps = supportedFps[Number(els.fpsRange.value)];
+    els.fpsRangeValue.textContent = fps + ' FPS';
+  });
+  els.fpsRange.addEventListener('change', () => {
+    const fps = supportedFps[Number(els.fpsRange.value)];
+    els.fpsSelect.value = String(fps);
+    applyCaptureSettings();
+  });
+  els.focusModeButton.addEventListener('click', () => setStudioMode(!studioMode));
   els.resolutionSelect.addEventListener('change', applyCaptureSettings);
   els.exposureSelect.addEventListener('change', () => {
     if (!els.exposureSelect.value) return;
@@ -388,6 +416,7 @@
   els.plusDrawings.addEventListener('click', () => setDrawings(1));
   els.useSyncFps.addEventListener('click', () => {
     els.fpsSelect.value = String(syncRecommendation);
+    syncFpsControls();
     changeTab('capture');
     applyCaptureSettings();
     status(`Preset ${syncRecommendation} FPS seleccionado. Comprueba los FPS reales al activar la cámara.`);
@@ -396,6 +425,8 @@
 
   loadSync();
   updateSync();
+  syncFpsControls();
+  if (window.matchMedia('(max-width: 960px)').matches) setStudioMode(true);
   setCameraUI(false);
   resetManualControls();
   if ('serviceWorker' in navigator && window.isSecureContext) {
