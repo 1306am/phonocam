@@ -30,7 +30,7 @@
     hudShutterControls: $('hudShutterControls'), hudShutterRange: $('hudShutterRange'),
     hudShutterMinus: $('hudShutterMinus'), hudShutterPlus: $('hudShutterPlus'),
     hudFpsControls: $('hudFpsControls'), hudFpsMinus: $('hudFpsMinus'), hudFpsPlus: $('hudFpsPlus'),
-    hudFocusMinus: $('hudFocusMinus'), hudFocusPlus: $('hudFocusPlus'),
+    hudFocusMinus: $('hudFocusMinus'), hudFocusPlus: $('hudFocusPlus'), hudFocusRangeToggle: $('hudFocusRangeToggle'),
     hudSaveVideo: $('hudSaveVideo'),
     hudIsoRange: $('hudIsoRange'), hudIsoControls: $('hudIsoControls'),
     hudIsoMinus: $('hudIsoMinus'), hudIsoPlus: $('hudIsoPlus'), hudIsoRangeToggle: $('hudIsoRangeToggle'),
@@ -63,7 +63,7 @@
   }
   let studioMode = false;
   let hudMode = 'fps';
-  let fitFrame=true, isoFineMode=true, manualFocusDistance=false;
+  let fitFrame=true, isoFineMode=true, manualFocusDistance=false, focusFineMode=true;
   let isoDebounceTimer=null,focusDebounceTimer=null,shutterDebounceTimer=null;
   let shutterSteps=[], presentationMode=false;
   function saveFraming(){try{localStorage.setItem('phonocam-framing',JSON.stringify({fitFrame}));}catch(_){}}
@@ -180,6 +180,48 @@
     els.hudValue.textContent = Math.round(rounded) + ' · solicitado';
   }
 
+
+  // The focus slider is a VIEWPORT over the real hardware focusDistance range.
+  // Changing FINO/COMPLETO never sends a camera constraint.
+  function configureHudFocusRange() {
+    const hud=els.hudFocusRange, button=els.hudFocusRangeToggle;
+    const cap=currentCapabilities.focusDistance;
+    const available=manualFocusDistance && isNumberRange(cap) && cap.max>cap.min;
+    hud.hidden=!available;
+    els.hudFocusMinus.hidden=!available;
+    els.hudFocusPlus.hidden=!available;
+    button.hidden=!available;
+    const disabled=!available||recorder?.state==='recording';
+    hud.disabled=disabled;
+    els.hudFocusMinus.disabled=disabled;
+    els.hudFocusPlus.disabled=disabled;
+    button.disabled=disabled;
+    if (!available) return;
+    const width=cap.max-cap.min;
+    const hardwareStep=cap.step>0?cap.step:width/1000;
+    // Restrict fine control to ~15% of camera range, with >=12 meaningful increments.
+    const fineWidth=Math.min(width,Math.max(width*0.15,hardwareStep*12));
+    const reported=videoTrack?.getSettings?.()||{};
+    const current=Number.isFinite(reported.focusDistance)
+      ?clamp(reported.focusDistance,cap.min,cap.max)
+      :clamp(Number(els.focusDistanceRange.value),cap.min,cap.max);
+    let low=cap.min,high=cap.max;
+    if (focusFineMode && fineWidth<width) {
+      // Default left-hand fine range, shift only when current focus lies beyond it.
+      low=current<=cap.min+fineWidth?cap.min
+        :clamp(current-fineWidth/2,cap.min,cap.max-fineWidth);
+      high=low+fineWidth;
+    }
+    hud.min=String(low);
+    hud.max=String(high);
+    hud.step=String(hardwareStep);
+    // Do not write the narrowed slider value back to the physical camera.
+    hud.value=String(clamp(current,low,high));
+    button.textContent=focusFineMode?'FINO':'COMPLETO';
+    button.setAttribute('aria-label',focusFineMode?'Usar rango completo de enfoque':'Usar rango fino de enfoque');
+    button.title='Ventana visual: '+round2(low)+'–'+round2(high)+'. No cambia la cámara.';
+  }
+
   function updateFocusDistanceReadout() {
     if (!manualFocusDistance) return;
     const current = videoTrack?.getSettings?.() || {};
@@ -264,16 +306,7 @@
     els.hudIsoMinus.disabled = els.hudIsoRange.disabled;
     els.hudIsoPlus.disabled = els.hudIsoRange.disabled;
     els.hudIsoRangeToggle.disabled = recording || els.isoRange.disabled;
-    els.hudFocusRange.min = els.focusDistanceRange.min;
-    els.hudFocusRange.max = els.focusDistanceRange.max;
-    els.hudFocusRange.step = els.focusDistanceRange.step;
-    els.hudFocusRange.value = els.focusDistanceRange.value;
-    els.hudFocusRange.disabled = recording || !manualFocusDistance;
-    els.hudFocusRange.hidden = !manualFocusDistance;
-    els.hudFocusMinus.hidden = !manualFocusDistance;
-    els.hudFocusPlus.hidden = !manualFocusDistance;
-    els.hudFocusMinus.disabled = els.hudFocusRange.disabled;
-    els.hudFocusPlus.disabled = els.hudFocusRange.disabled;
+    configureHudFocusRange();
     els.hudFocusSelect.hidden = manualFocusDistance;
     els.hudFocusAuto.disabled = recording || !stream || !Array.isArray(currentCapabilities.focusMode) || !currentCapabilities.focusMode.includes('continuous');
     els.hudShutterLabel.textContent = els.exposureSelect.disabled ? '—'
@@ -325,7 +358,7 @@
       : isUnavailable && hudMode !== 'fps'
         ? 'Tu navegador no permite ajustar este parámetro manualmente.'
         : hudMode === 'focus' && manualFocusDistance
-          ? 'Mueve el slider con el disco DETENIDO y comprueba el enfoque. El valor depende del teléfono.'
+          ? 'FINO amplía una zona pequeña del enfoque. COMPLETO recupera todo el recorrido; enfoca con el disco detenido.'
         : hudMode === 'shutter'
           ? 'Exposición solicitada, no garantizada. Comprueba la confirmación de la cámara.'
         : hudMode === 'iso'
@@ -542,6 +575,7 @@
   function cleanupStream() {
     if(presentationMode)leavePresentation();
     focusDistanceUnverified=false; // reset only when switching camera/starting a new session
+    focusFineMode=true;
     if (stream) stream.getTracks().forEach((track) => track.stop());
     stream = null; videoTrack = null;
     els.cameraPreview.pause();
@@ -948,6 +982,15 @@
       if (Math.abs(nextValue-Number(range.value))<1e-9) return;
       applyFocusFromHud(nextValue);
     });
+  });
+  els.hudFocusRangeToggle.addEventListener('click',()=>{
+    if(!manualFocusDistance || recorder?.state==='recording')return;
+    focusFineMode=!focusFineMode;
+    configureHudFocusRange();
+    status(focusFineMode
+      ? 'Enfoque FINO: slider ampliado sobre aproximadamente 15% del rango disponible.'
+      : 'Enfoque COMPLETO: rango total del teléfono. Cambiar la vista no cambia el enfoque.',
+      'online');
   });
   els.focusDistanceRange.addEventListener('change', () => {
     if (!manualFocusDistance) return;
