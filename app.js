@@ -23,6 +23,11 @@
     fpsRange: $('fpsRange'), fpsRangeValue: $('fpsRangeValue'), focusModeButton: $('focusModeButton'),
     cameraHud: $('cameraHud'), hudTitle: $('hudTitle'), hudValue: $('hudValue'),
     hudHint: $('hudHint'), hudFpsRange: $('hudFpsRange'), hudShutterSelect: $('hudShutterSelect'),
+    hudShutterControls: $('hudShutterControls'), hudShutterRange: $('hudShutterRange'),
+    hudShutterMinus: $('hudShutterMinus'), hudShutterPlus: $('hudShutterPlus'),
+    lensTool: $('lensTool'), lensButton: $('lensButton'), lensMenu: $('lensMenu'),
+    lensSelect: $('lensSelect'), lensHint: $('lensHint'), lensZoomGroup: $('lensZoomGroup'),
+    lensZoomRange: $('lensZoomRange'), lensZoomValue: $('lensZoomValue'), lensZoomHint: $('lensZoomHint'),
     hudIsoRange: $('hudIsoRange'), hudIsoControls: $('hudIsoControls'),
     hudIsoMinus: $('hudIsoMinus'), hudIsoPlus: $('hudIsoPlus'), hudIsoRangeToggle: $('hudIsoRangeToggle'),
     hudFocusSelect: $('hudFocusSelect'), hudFocusControls: $('hudFocusControls'), hudFocusRange: $('hudFocusRange'),
@@ -39,7 +44,8 @@
   let fitFrame = false;
   let isoFineMode = true;
   let manualFocusDistance = false;
-  let isoDebounceTimer = null, focusDebounceTimer = null;
+  let isoDebounceTimer = null, focusDebounceTimer = null, shutterDebounceTimer = null, lensZoomTimer = null;
+  let selectedCameraId = null, knownCameras = [], shutterSteps = [];
   function setStudioMode(enabled) {
     studioMode = enabled;
     document.body.classList.toggle('studio-mode', enabled);
@@ -66,7 +72,7 @@
   let recorder = null, parts = [], recordingStarted = 0, timerId = null, videoUrl = null;
   let guideEnabled = true, busy = false, currentCapabilities = {};
   let syncRecommendation = 24;
-  const presets = [60, 125, 250, 500, 1000, 2000, 4000];
+  const presets = [30,40,50,60,80,100,125,160,200,250,320,400,500,640,800,1000,1250,1600,2000,2500,3200,4000,5000,6400,8000];
 
   function status(message, mode = 'normal') {
     els.statusText.textContent = message;
@@ -150,6 +156,96 @@
       .then(() => { updateFocusDistanceReadout(); renderHud(); });
   }
 
+
+  // Exposure time is expressed in 100-microsecond units by the camera API.
+  function updateShutterSlider() {
+    const available = !els.exposureSelect.disabled && shutterSteps.length > 0;
+    const locked = recorder?.state === 'recording';
+    els.hudShutterRange.min = '0';
+    els.hudShutterRange.max = String(Math.max(0, shutterSteps.length - 1));
+    els.hudShutterRange.step = '1';
+    const selected=Number(els.exposureSelect.value);
+    const desired=selected>0?selected:500;
+    const nearest = shutterSteps.reduce((best,denom,i)=>
+      Math.abs(Math.log(denom/desired)) < Math.abs(Math.log(shutterSteps[best]/desired))?i:best,0);
+    els.hudShutterRange.value=String(nearest);
+    [els.hudShutterRange,els.hudShutterMinus,els.hudShutterPlus].forEach(el=>el.disabled=!available||locked);
+  }
+  function applyShutterIndex(index) {
+    if (!videoTrack || els.exposureSelect.disabled || recorder?.state==='recording') return;
+    const denom=shutterSteps[clamp(Math.round(Number(index)),0,shutterSteps.length-1)];
+    if(!denom)return;
+    els.hudValue.textContent='1/'+denom+' · solicitado';
+    els.hudShutterLabel.textContent='1/'+denom;
+    els.exposureSelect.value=String(denom);
+    const units=10000/denom;
+    applyManual({exposureMode:'manual',exposureTime:units},'exposureTime',units)
+      .then(()=>renderHud());
+  }
+  function lensLabel(device,idx){
+    const name=(device.label||'').trim()||'Cámara '+(idx+1)+' (sin nombre)';
+    return /ultra.?wide|ultra.?gran|0[.,]5\s?[x×]|super.?wide/i.test(device.label||'')
+      ? '0.5× · '+name : name;
+  }
+  async function refreshCameraList(){
+    if(!navigator.mediaDevices?.enumerateDevices||!stream)return;
+    try{
+      knownCameras=(await navigator.mediaDevices.enumerateDevices())
+        .filter(c=>c.kind==='videoinput'&&c.deviceId);
+      const list=[new Option('Trasera (automática)','auto-rear'),
+        new Option('Frontal (automática)','auto-front')];
+      knownCameras.forEach((c,i)=>list.push(new Option(lensLabel(c,i),c.deviceId)));
+      els.lensSelect.replaceChildren(...list);
+      els.lensSelect.value=selectedCameraId||(facingMode==='user'?'auto-front':'auto-rear');
+      const wide=knownCameras.filter(c=>/ultra.?wide|ultra.?gran|0[.,]5\s?[x×]|super.?wide/i.test(c.label||''));
+      els.lensHint.textContent=wide.length
+        ? 'Hay cámaras etiquetadas como ultra gran angular. Selecciona una y comprueba la imagen.'
+        : knownCameras.length>1
+          ? knownCameras.length+' cámaras disponibles. Las etiquetas pueden ser genéricas: compara el campo visual.'
+          : 'Chrome expone '+knownCameras.length+' cámara(s). Si el ultra wide no aparece, no podemos forzarlo desde el navegador.';
+      const id=videoTrack?.getSettings?.()?.deviceId;
+      const current=knownCameras.find(c=>c.deviceId===id);
+      if(current&&!selectedCameraId)els.lensHint.textContent+=' Actual: '+(current.label||'predeterminada')+'.';
+    }catch(e){els.lensHint.textContent='No fue posible listar las cámaras: '+(e.message||e.name||'error')+'.';}
+  }
+  function setupZoomControl(){
+    const cap=currentCapabilities.zoom;
+    const available=isNumberRange(cap)&&cap.max>cap.min;
+    els.lensZoomGroup.hidden=!available;
+    els.lensZoomRange.disabled=!available||recorder?.state==='recording';
+    if(!available)return;
+    els.lensZoomRange.min=String(cap.min);
+    els.lensZoomRange.max=String(cap.max);
+    els.lensZoomRange.step=String(cap.step>0?cap.step:0.1);
+    const z=videoTrack?.getSettings?.()?.zoom;
+    els.lensZoomRange.value=String(clamp(Number.isFinite(z)?z:1,cap.min,cap.max));
+    els.lensZoomValue.textContent=round2(Number(els.lensZoomRange.value))+'×';
+    els.lensZoomHint.textContent=cap.min<1
+      ? 'La cámara permite bajar de 1×; comprueba si realmente amplía el encuadre.'
+      : 'El zoom parte de '+round2(cap.min)+'×: no equivale al lente ultra gran angular.';
+  }
+  async function selectCameraFromMenu(choice){
+    if(busy||recorder?.state==='recording'||!stream)return;
+    const previousId=selectedCameraId, previousFacing=facingMode;
+    if(choice==='auto-rear'){selectedCameraId=null;facingMode='environment';}
+    else if(choice==='auto-front'){selectedCameraId=null;facingMode='user';}
+    else selectedCameraId=choice;
+    els.lensSelect.disabled=true;
+    cleanupStream();
+    const success=await startCamera();
+    if(!success){
+      selectedCameraId=previousId;facingMode=previousFacing;
+      await startCamera();
+      status('No se pudo seleccionar ese lente; se intentó restaurar el anterior.','error');
+    }else{
+      const chosen=knownCameras.find(c=>c.deviceId===selectedCameraId);
+      status('Cámara: '+(chosen?.label||(selectedCameraId?'seleccionada':'automática'))+'. Comprueba el encuadre.','online');
+    }
+    els.lensSelect.disabled=false;
+    els.lensMenu.hidden=true;
+    els.lensButton.setAttribute('aria-expanded','false');
+  }
+
   // Overlay controls mirror the same native browser constraints as the full settings.
   // The HUD overlays the preview only; none of these elements are written to the video file.
   function mirrorOptions(source, destination) {
@@ -166,6 +262,7 @@
     els.hudFpsRange.disabled = recording || !stream;
     els.hudFpsLabel.textContent = String(fps);
     mirrorOptions(els.exposureSelect, els.hudShutterSelect);
+    updateShutterSlider();
     mirrorOptions(els.focusSelect, els.hudFocusSelect);
     els.hudShutterSelect.disabled = recording || els.exposureSelect.disabled;
     els.hudFocusSelect.disabled = recording || els.focusSelect.disabled;
@@ -198,6 +295,9 @@
     els.hudRecord.setAttribute('aria-label', recording ? 'Detener grabación' : 'Iniciar grabación');
     els.hudSwapCamera.disabled = recording || !stream;
     els.hudPower.disabled = recording || !stream;
+    els.lensButton.disabled=recording||!stream;
+    els.lensSelect.disabled=recording||!stream;
+    if(!els.lensZoomGroup.hidden)els.lensZoomRange.disabled=recording||!stream;
     els.hudAdvanced.disabled = recording;
     els.hudGuides.classList.toggle('is-active', guideEnabled);
     els.hudClip.hidden = !videoUrl || recording;
@@ -207,7 +307,7 @@
   function updateHudMode() {
     const config = {
       fps: { tab: els.hudFpsTab, input: els.hudFpsRange, name: 'FRAME RATE', label: els.hudFpsLabel },
-      shutter: { tab: els.hudShutterTab, input: els.hudShutterSelect, name: 'SHUTTER / EXPOSURE', label: els.hudShutterLabel },
+      shutter: { tab: els.hudShutterTab, input: els.hudShutterControls, control: els.hudShutterRange, name: 'SHUTTER · AJUSTE FINO', label: els.hudShutterLabel },
       iso: { tab: els.hudIsoTab, input: els.hudIsoControls, control: els.hudIsoRange, name: 'ISO · AJUSTE FINO', label: els.hudIsoLabel },
       focus: { tab: els.hudFocusTab, input: els.hudFocusControls, control: manualFocusDistance ? els.hudFocusRange : els.hudFocusSelect, name: manualFocusDistance ? 'FOCUS · DISTANCIA MANUAL' : 'FOCUS MODE', label: els.hudFocusLabel }
     };
@@ -228,6 +328,8 @@
         ? 'Tu navegador no permite ajustar este parámetro manualmente.'
         : hudMode === 'focus' && manualFocusDistance
           ? 'Mueve el slider con el disco DETENIDO y comprueba el enfoque. El valor depende del teléfono.'
+        : hudMode === 'shutter'
+          ? 'Exposición solicitada, no garantizada. Comprueba la confirmación de la cámara.'
         : hudMode === 'iso'
           ? 'Ajustes precisos. FINO/AMPLIO cambia solamente el rango visible, no el ISO de la cámara.'
         : hudMode === 'fps'
@@ -273,6 +375,8 @@
     els.viewfinderBottom.hidden = !enabled;
     els.guideLayer.hidden = !enabled || !guideEnabled;
     els.cameraHud.hidden = !enabled;
+    els.lensTool.hidden=!enabled;
+    if(!enabled){els.lensMenu.hidden=true;els.lensButton.setAttribute('aria-expanded','false');}
     document.body.classList.toggle('camera-live', enabled);
     if (!enabled) {
       closeAdvanced();
@@ -298,6 +402,8 @@
 
   function resetManualControls() {
     currentCapabilities = {};
+    shutterSteps=[];
+    els.lensZoomGroup.hidden=true;
     els.exposureSelect.replaceChildren(new Option('No disponible', ''));
     els.focusSelect.replaceChildren(new Option('No disponible', ''));
     els.exposureSelect.disabled = true;
@@ -329,6 +435,7 @@
         return units >= cap.exposureTime.min && units <= cap.exposureTime.max;
       });
       if (available.length) {
+        shutterSteps=available.slice();
         els.exposureSelect.replaceChildren(new Option('Seleccionar…', ''));
         available.forEach((denom) => els.exposureSelect.add(new Option(`1/${denom} s`, String(denom))));
         els.exposureSelect.disabled = false;
@@ -376,6 +483,7 @@
       els.manualBadge.classList.add('supported');
       els.manualNote.textContent = 'Los ajustes se envían al hardware. Comprueba el mensaje de confirmación: si el navegador no reporta el valor aplicado, no podemos verificar el cambio.';
     }
+    setupZoomControl();
     renderHud();
   }
 
@@ -408,13 +516,14 @@
     els.startCamera.disabled = true;
     status('Solicitando permiso para utilizar la cámara…');
     const [width, height] = els.resolutionSelect.value.split('x').map(Number);
-    const video = { facingMode: { ideal: facingMode }, width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: Number(els.fpsSelect.value) } };
+    const video = { ...(selectedCameraId?{deviceId:{exact:selectedCameraId}}:{facingMode:{ideal:facingMode}}),
+      width:{ideal:width},height:{ideal:height},frameRate:{ideal:Number(els.fpsSelect.value)} };
     try {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
       } catch (firstError) {
         // Fallback for a device/browser that rejects requested capture settings.
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facingMode } }, audio: false });
+        stream = await navigator.mediaDevices.getUserMedia({ video: selectedCameraId?{deviceId:{exact:selectedCameraId}}:{facingMode:{ideal:facingMode}}, audio: false });
       }
       videoTrack = stream.getVideoTracks()[0];
       els.cameraPreview.srcObject = stream;
@@ -422,13 +531,16 @@
       setCameraUI(true);
       updateActualSettings();
       setupManualControls();
+      await refreshCameraList();
       status('Cámara activa. Revisa los FPS efectivos en el monitor.', 'online');
+      return true;
     } catch (err) {
       cleanupStream();
       const msg = err.name === 'NotAllowedError'
         ? 'Permiso denegado. Autoriza la cámara en los ajustes del navegador.'
         : `No se pudo iniciar la cámara (${err.name || 'error'}). ${err.message || ''}`;
       status(msg, 'error');
+      return false;
     } finally { busy = false; els.startCamera.disabled = false; }
   }
 
@@ -508,6 +620,8 @@
       els.exposureSelect.disabled = true;
       els.isoRange.disabled = true;
       els.focusSelect.disabled = true;
+      els.lensButton.disabled=true;els.lensSelect.disabled=true;els.lensZoomRange.disabled=true;
+      els.lensMenu.hidden=true;
       closeAdvanced();
       document.body.classList.remove('clip-open');
       renderHud();
@@ -561,6 +675,7 @@
   async function switchCamera() {
     if (recorder?.state === 'recording' || busy) return;
     cleanupStream();
+    selectedCameraId=null;
     facingMode = facingMode === 'environment' ? 'user' : 'environment';
     await startCamera();
   }
@@ -695,6 +810,44 @@
     els.exposureSelect.dispatchEvent(new Event('change'));
     renderHud();
   });
+  els.hudShutterRange.addEventListener('input',()=>{
+    const denominator=shutterSteps[Number(els.hudShutterRange.value)];
+    if(!denominator)return;
+    els.hudValue.textContent='1/'+denominator+' · pendiente';
+    clearTimeout(shutterDebounceTimer);
+    shutterDebounceTimer=setTimeout(()=>applyShutterIndex(els.hudShutterRange.value),150);
+  });
+  els.hudShutterRange.addEventListener('change',()=>{
+    clearTimeout(shutterDebounceTimer);
+    applyShutterIndex(els.hudShutterRange.value);
+  });
+  [els.hudShutterMinus,els.hudShutterPlus].forEach((btn,i)=>btn.addEventListener('click',()=>{
+    if(els.hudShutterRange.disabled)return;
+    clearTimeout(shutterDebounceTimer);
+    applyShutterIndex(Number(els.hudShutterRange.value)+(i===0?-1:1));
+  }));
+  els.lensButton.addEventListener('click',()=>{
+    if(!stream||recorder?.state==='recording')return;
+    els.lensMenu.hidden=!els.lensMenu.hidden;
+    els.lensButton.setAttribute('aria-expanded',String(!els.lensMenu.hidden));
+  });
+  els.lensSelect.addEventListener('change',()=>selectCameraFromMenu(els.lensSelect.value));
+  function applyLensZoom(){
+    if(els.lensZoomRange.disabled)return;
+    const val=Number(els.lensZoomRange.value);
+    applyManual({zoom:val},'zoom',val).then(()=>{
+      const real=videoTrack?.getSettings?.()?.zoom;
+      els.lensZoomValue.textContent=Number.isFinite(real)?round2(real)+'×':'sin verificar';
+    });
+  }
+  els.lensZoomRange.addEventListener('input',()=>{
+    els.lensZoomValue.textContent=round2(Number(els.lensZoomRange.value))+'× · pendiente';
+    clearTimeout(lensZoomTimer);
+    lensZoomTimer=setTimeout(applyLensZoom,160);
+  });
+  els.lensZoomRange.addEventListener('change',()=>{
+    clearTimeout(lensZoomTimer);applyLensZoom();
+  });
   els.hudIsoRange.addEventListener('input', () => {
     els.hudValue.textContent = Math.round(Number(els.hudIsoRange.value)) + ' · pendiente';
     clearTimeout(isoDebounceTimer);
@@ -757,7 +910,7 @@
   els.hudClip.addEventListener('click', openClip);
   els.closeClip.addEventListener('click', () => document.body.classList.remove('clip-open'));
   window.addEventListener('pagehide', () => {
-    clearTimeout(isoDebounceTimer); clearTimeout(focusDebounceTimer);
+    clearTimeout(isoDebounceTimer); clearTimeout(focusDebounceTimer); clearTimeout(shutterDebounceTimer);clearTimeout(lensZoomTimer);
     if (recorder?.state === 'recording') { try { recorder.stop(); } catch (_) {} }
     cleanupStream();
   });
