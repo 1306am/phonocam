@@ -316,3 +316,59 @@
 @media(max-width:420px){
   body.studio-mode .lens-tool{top:40px}
 }
+
+
+/* PhonoCam v0.8 – accessible touch controls and clear video saving. */
+.hud-fps-controls,
+.hud-focus-adjust{width:100%;min-width:0;gap:7px;align-items:center}
+.hud-focus-adjust .precision-step{
+  display:grid;place-items:center;flex:0 0 34px;
+  width:34px;height:34px;border:1px solid #68777b;
+  border-radius:8px;background:#28363a;color:#f2f3ef;
+  font-size:22px;font-weight:600;touch-action:manipulation;
+}
+.hud-focus-adjust .precision-step:disabled{opacity:.35}
+.hud-save-video{
+  display:flex;align-items:center;justify-content:center;
+  width:100%;min-height:38px;border-radius:9px;
+  padding:8px 12px;border:1px solid #d8f56a;
+  background:#d8f56a;color:#192319;font-size:12px;
+  font-weight:850;letter-spacing:.25px;
+  box-shadow:0 3px 15px #050c05a0;pointer-events:auto;
+  touch-action:manipulation;
+}
+.hud-clip-tool{
+  font-weight:850!important;font-size:10px!important;
+  letter-spacing:.1px;white-space:nowrap;
+  border-color:#d8f56a!important;color:#d8f56a!important;
+}
+@media(max-width:960px){
+  body.studio-mode .hud-fps-controls{display:flex;align-items:center;width:100%;gap:7px}
+  body.studio-mode .hud-fps-controls[hidden]{display:none!important}
+  body.studio-mode .hud-fps-controls input[type=range],
+  body.studio-mode .hud-focus-adjust input[type=range]{
+    flex:1 1 auto;min-width:0;width:auto!important;height:36px;min-height:36px;
+    margin:0;touch-action:pan-y;
+  }
+  body.studio-mode .hud-fps-controls .precision-step,
+  body.studio-mode .hud-focus-adjust .precision-step{
+    display:grid;place-items:center;flex:0 0 34px;
+    width:34px;height:34px;border:1px solid #68777b;
+    border-radius:8px;background:#28363a;color:#f2f3ef;
+    font-size:22px;font-weight:600;touch-action:manipulation;
+  }
+  body.studio-mode .hud-fps-controls .precision-step:disabled,
+  body.studio-mode .hud-focus-adjust .precision-step:disabled{opacity:.35}
+  body.studio-mode .hud-focus-adjust button[hidden]{display:none!important}
+  body.studio-mode .hud-save-video:not([hidden]){display:flex}
+  body.studio-mode .hud-clip-tool{
+    width:clamp(47px,11vw,60px)!important;
+    min-width:47px;flex:0 0 auto!important;
+    font-size:9px!important;padding:0 3px;
+  }
+}
+@media(max-width:380px){
+  body.studio-mode .hud-fps-controls .precision-step,
+  body.studio-mode .hud-focus-adjust .precision-step{width:30px;height:30px;flex-basis:30px}
+  body.studio-mode .hud-save-video{min-height:34px;padding:6px;font-size:11px}
+}
