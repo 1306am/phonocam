@@ -1,7 +1,7 @@
-// PhonoCam v1.2 - prefer current network assets, keep a fallback for offline use.
-const CACHE_NAME = 'phonocam-v12';
+// PhonoCam v1.3 - prefer current network assets, keep a fallback for offline use.
+const CACHE_NAME = 'phonocam-v13';
 const CORE_FILES = [
-  './', './index.html', './styles.css?v=1.2', './app.js?v=1.2',
+  './', './index.html', './styles.css?v=1.3', './app.js?v=1.3',
   './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'
 ];
 
