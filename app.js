@@ -25,13 +25,14 @@
     hudFpsTab: $('hudFpsTab'), hudShutterTab: $('hudShutterTab'), hudIsoTab: $('hudIsoTab'),
     hudFocusTab: $('hudFocusTab'), hudFpsLabel: $('hudFpsLabel'), hudShutterLabel: $('hudShutterLabel'),
     hudIsoLabel: $('hudIsoLabel'), hudFocusLabel: $('hudFocusLabel'),
-    hudGuides: $('hudGuides'), hudSwapCamera: $('hudSwapCamera'), hudRecord: $('hudRecord'),
+    hudGuides: $('hudGuides'), hudSwapCamera: $('hudSwapCamera'), hudFit: $('hudFit'), hudRecord: $('hudRecord'),
     hudClip: $('hudClip'), hudAdvanced: $('hudAdvanced'), hudPower: $('hudPower'),
     closeAdvanced: $('closeAdvanced'), closeClip: $('closeClip'),
   };
   const supportedFps = [12, 15, 24, 25, 30, 60];
   let studioMode = false;
   let hudMode = 'fps';
+  let fitFrame = false;
   function setStudioMode(enabled) {
     studioMode = enabled;
     document.body.classList.toggle('studio-mode', enabled);
@@ -599,6 +600,20 @@
   });
   els.hudRecord.addEventListener('click', toggleRecording);
   els.hudSwapCamera.addEventListener('click', switchCamera);
+  els.hudFit.addEventListener('click', () => {
+    fitFrame = !fitFrame;
+    document.body.classList.toggle('fit-frame', fitFrame);
+    els.hudFit.textContent = fitFrame ? 'FIT' : 'FILL';
+    els.hudFit.classList.toggle('is-active', fitFrame);
+    els.hudFit.setAttribute('aria-label', fitFrame
+      ? 'Cambiar a llenar el visor' : 'Mostrar el encuadre completo');
+    els.hudFit.title = fitFrame
+      ? 'Ver video llenando la pantalla' : 'Ver cuadro completo sin recorte';
+    status(fitFrame
+      ? 'Modo FIT: se ve todo el encuadre, con barras si es necesario.'
+      : 'Modo FILL: el visor llena la pantalla; la grabación conserva el cuadro completo.',
+      'online');
+  });
   els.hudGuides.addEventListener('click', () => els.toggleGuide.click());
   els.hudPower.addEventListener('click', stopCamera);
   els.hudAdvanced.addEventListener('click', toggleAdvanced);
