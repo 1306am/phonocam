@@ -298,6 +298,7 @@
     els.hudAdvanced.disabled = recording;
     els.hudClip.hidden = !videoUrl || recording;
     els.hudSaveVideo.hidden = !videoUrl || recording;
+    els.quickApply.disabled = recording || syncApplying || !syncValid;
     updateHudMode();
   }
 
@@ -710,31 +711,85 @@
     els.syncTab.setAttribute('aria-selected', String(!capture));
   }
 
+  function syncQuickUi(){
+    const speed=els.rpmSelect.value;
+    [[els.quickRpm33,'33.3333333333'],[els.quickRpm45,'45'],[els.quickRpm78,'78']].forEach(([button,value])=>{
+      const selected=speed===value;
+      button.classList.toggle('is-selected',selected);
+      button.setAttribute('aria-pressed',String(selected));
+    });
+    els.quickDrawings.value=els.drawingCount.value;
+    els.quickStep.value=els.stepSelect.value;
+    els.quickTarget.textContent=syncValid
+      ? fpsLabel(syncRecommendation)+' FPS'
+      : '— FPS';
+    els.quickApply.disabled=!syncValid||syncApplying||recorder?.state==='recording';
+  }
+
   function updateSync() {
-    const isCustom = els.rpmSelect.value === 'custom';
-    els.customRpmRow.hidden = !isCustom;
-    const rpm = Number(isCustom ? els.customRpm.value : els.rpmSelect.value);
-    const drawings = Number(els.drawingCount.value);
-    const step = Number(els.stepSelect.value);
-    const valid = Number.isFinite(rpm) && rpm > 0 && rpm <= 300 && Number.isInteger(drawings) && drawings >= 2 && drawings <= 200;
-    if (!valid) {
-      els.idealFps.innerHTML = `— <small>FPS</small>`;
-      els.syncExplain.textContent = 'Introduce RPM entre 1 y 300, y de 2 a 200 dibujos.';
-      els.fpsSuggestion.textContent = 'Esperando datos válidos.';
-      els.useSyncFps.disabled = true;
-      return;
+    const isCustom=els.rpmSelect.value==='custom';
+    els.customRpmRow.hidden=!isCustom;
+    const rpm=Number(isCustom?els.customRpm.value:els.rpmSelect.value);
+    const drawings=Number(els.drawingCount.value);
+    const step=Number(els.stepSelect.value);
+    const valid=Number.isFinite(rpm)&&rpm>0&&rpm<=300&&Number.isInteger(drawings)&&drawings>=2&&drawings<=200&&[1,2,3,4].includes(step);
+    if(!valid){
+      syncValid=false;
+      els.idealFps.innerHTML='— <small>FPS</small>';
+      els.syncExplain.textContent='Introduce RPM (1–300), dibujos (2–200) y un paso válido.';
+      els.fpsSuggestion.textContent='Esperando datos válidos.';
+      els.quickFeedback.textContent='Revisa el número de dibujos y el paso.';
+      els.useSyncFps.disabled=true;
+      syncQuickUi();return;
     }
-    const theoretical = rpm * drawings / (60 * step);
-    syncRecommendation = cleanFps(theoretical);
-    const deviation = Math.abs(syncRecommendation - theoretical);
-    const exact = deviation < 0.015;
-    els.idealFps.innerHTML = `${theoretical.toFixed(2)} <small>FPS</small>`;
-    els.syncExplain.textContent = `${round2(rpm)} RPM × ${drawings} dibujos ÷ (60 × ${step}) = ${theoretical.toFixed(2)} FPS.`;
-    els.fpsSuggestion.textContent = exact
-      ? `${fpsLabel(syncRecommendation)} FPS coincide con la relación teórica. Pruébalo con un obturador rápido y luz suficiente.`
-      : `Puedes solicitar ${fpsLabel(syncRecommendation)} FPS (diferencia teórica ${deviation.toFixed(2)} FPS). El navegador podría redondear el valor; verifica LIVE. Ajusta las RPM si hay deriva.`;
-    els.useSyncFps.disabled = false;
-    try { localStorage.setItem('phonocam-sync', JSON.stringify({ rpmSelect: els.rpmSelect.value, customRpm: els.customRpm.value, drawings, step })); } catch (_) { /* optional */ }
+    const theoretical=rpm*drawings/(60*step);
+    syncTheoretical=theoretical;
+    syncValid=theoretical>=fpsMin&&theoretical<=fpsMax;
+    syncRecommendation=cleanFps(theoretical);
+    const deviation=Math.abs(syncRecommendation-theoretical);
+    els.idealFps.innerHTML=theoretical.toFixed(2)+' <small>FPS</small>';
+    els.syncExplain.textContent=round2(rpm)+' RPM × '+drawings+' dibujos ÷ (60 × '+step+') = '+theoretical.toFixed(2)+' FPS.';
+    if(!syncValid){
+      els.fpsSuggestion.textContent='Fuera del rango de captura ('+fpsMin+'–'+fpsMax+' FPS). Cambia PASO ×1–×4 o los dibujos; no aplicaré un valor recortado.';
+      els.quickFeedback.textContent='Teórico '+theoretical.toFixed(2)+' FPS, fuera de rango. Ajusta PASO.';
+    }else{
+      els.fpsSuggestion.textContent='Objetivo '+fpsLabel(syncRecommendation)+' FPS (teórico '+theoretical.toFixed(2)+', diferencia '+deviation.toFixed(2)+'). Pulsa Aplicar y revisa los FPS que reporta el teléfono.';
+      els.quickFeedback.textContent='Teórico '+theoretical.toFixed(2)+' FPS · paso ×'+step+' · cámara aún sin verificar.';
+      if(rpm===78&&step===1&&drawings===32)els.quickFeedback.textContent+=' Para una cadencia más baja, prueba PASO ×3 (~13.87 FPS).';
+    }
+    els.useSyncFps.disabled=!syncValid||syncApplying||recorder?.state==='recording';
+    syncQuickUi();
+    try{localStorage.setItem('phonocam-sync',JSON.stringify({rpmSelect:els.rpmSelect.value,customRpm:els.customRpm.value,drawings,step}));}catch(_){}
+  }
+
+  async function applySyncRecommendation() {
+    if(!syncValid || syncApplying || recorder?.state==='recording')return;
+    syncApplying=true;
+    els.quickApply.disabled=true;
+    els.useSyncFps.disabled=true;
+    const target=syncRecommendation;
+    setRequestedFps(target);
+    const message='Solicitando '+fpsLabel(target)+' FPS (teórico '+syncTheoretical.toFixed(2)+')…';
+    els.quickFeedback.textContent=message;
+    els.syncApplyFeedback.textContent=message;
+    let msg='';
+    if(!videoTrack){
+      msg='Preparados '+fpsLabel(target)+' FPS para cuando actives la cámara. Todavía no se aplicaron al hardware.';
+    }else{
+      const result=await applyCaptureSettings();
+      const actual=result.reported;
+      if(result.ok){
+        msg='Cámara reporta '+fpsLabel(actual)+' FPS; solicitado '+fpsLabel(target)+' FPS. Coinciden, pero esto no certifica la cadencia efectiva del archivo.';
+      }else{
+        msg='No confirmado: solicitado '+fpsLabel(target)+' FPS; cámara reporta '+(actual===null?'sin dato':fpsLabel(actual)+' FPS')+'. Prueba otro PASO o velocidad. '+(result.reason||'');
+      }
+    }
+    els.quickFeedback.textContent=msg;
+    els.syncApplyFeedback.textContent=msg;
+    status(msg,videoTrack&&msg.startsWith('Cámara reporta')?'online':'error');
+    syncApplying=false;
+    syncQuickUi();
+    renderHud();
   }
 
   function setDrawings(amount) {
@@ -789,17 +844,27 @@
     if (!els.focusSelect.value) return;
     applyManual({ focusMode: els.focusSelect.value }, 'focusMode', els.focusSelect.value);
   });
-  [els.rpmSelect, els.customRpm, els.drawingCount, els.stepSelect].forEach((elem) => elem.addEventListener('input', updateSync));
-  els.minusDrawings.addEventListener('click', () => setDrawings(-1));
-  els.plusDrawings.addEventListener('click', () => setDrawings(1));
-  els.useSyncFps.addEventListener('click', () => {
-    els.fpsSelect.value = String(syncRecommendation);
-    syncFpsControls();
-    changeTab('capture');
-    closeAdvanced();
-    applyCaptureSettings();
-    status(`Preset ${syncRecommendation} FPS seleccionado. Comprueba los FPS reales al activar la cámara.`);
+  [els.rpmSelect, els.customRpm, els.drawingCount, els.stepSelect].forEach((elem)=>elem.addEventListener('input',updateSync));
+  els.minusDrawings.addEventListener('click',()=>setDrawings(-1));
+  els.plusDrawings.addEventListener('click',()=>setDrawings(1));
+  [[els.quickRpm33,'33.3333333333',1],[els.quickRpm45,'45',1],[els.quickRpm78,'78',3]].forEach(([button,rpm,recommendedStep])=>{
+    button.addEventListener('click',()=>{
+      els.rpmSelect.value=rpm;
+      els.stepSelect.value=String(recommendedStep); // explicit turntable preset, editable in PASO
+      updateSync();
+      els.syncApplyFeedback.textContent='RPM '+(rpm==='33.3333333333'?'33⅓':rpm)+' y PASO ×'+recommendedStep+' seleccionados; aún no aplicados a cámara.';
+    });
   });
+  els.quickDrawings.addEventListener('input',()=>{
+    els.drawingCount.value=els.quickDrawings.value;
+    updateSync();
+  });
+  els.quickStep.addEventListener('change',()=>{
+    els.stepSelect.value=els.quickStep.value;
+    updateSync();
+  });
+  els.quickApply.addEventListener('click',applySyncRecommendation);
+  els.useSyncFps.addEventListener('click',applySyncRecommendation);
 
   // Touch controls live in the preview, but use the canonical capture settings.
   const hudModes = [
@@ -889,6 +954,16 @@
     const requested = Number(els.focusDistanceRange.value);
     applyManual({focusMode:'manual',focusDistance:requested}, 'focusDistance', requested)
       .then(() => {updateFocusDistanceReadout();renderHud();});
+  });
+  els.hudFocusAuto.addEventListener('click',async()=>{
+    if(!videoTrack||recorder?.state==='recording'||els.hudFocusAuto.disabled)return;
+    const ok=await applyManual({focusMode:'continuous'},'focusMode','continuous');
+    if(ok){
+      els.focusSelect.value='continuous';
+      els.hudFocusSelect.value='continuous';
+      status('Enfoque automático continuo reportado por el navegador. No implica comprobación visual de nitidez.','online');
+    }
+    renderHud();
   });
   els.hudFocusSelect.addEventListener('change', () => {
     els.focusSelect.value = els.hudFocusSelect.value;
