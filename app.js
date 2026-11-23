@@ -28,6 +28,9 @@
     lensTool: $('lensTool'), lensButton: $('lensButton'), lensMenu: $('lensMenu'),
     lensSelect: $('lensSelect'), lensHint: $('lensHint'), lensZoomGroup: $('lensZoomGroup'),
     lensZoomRange: $('lensZoomRange'), lensZoomValue: $('lensZoomValue'), lensZoomHint: $('lensZoomHint'),
+    fullDiscButton: $('fullDiscButton'), fullDiscMenu: $('fullDiscMenu'),
+    safeMarginSelect: $('safeMarginSelect'), safeDiscNotice: $('safeDiscNotice'),
+    safeDiscGuide: $('safeDiscGuide'), safeDiscCircle: $('safeDiscCircle'),
     hudFpsControls: $('hudFpsControls'), hudFpsMinus: $('hudFpsMinus'), hudFpsPlus: $('hudFpsPlus'),
     hudFocusMinus: $('hudFocusMinus'), hudFocusPlus: $('hudFocusPlus'),
     hudSaveVideo: $('hudSaveVideo'),
@@ -44,14 +47,90 @@
   const supportedFps = [12, 15, 24, 25, 30, 60];
   let studioMode = false;
   let hudMode = 'fps';
-  let fitFrame = false;
+  let fitFrame = true;
+  let fullDiscMode = false;
+  let safeMargin = 8;
   let isoFineMode = true;
   let manualFocusDistance = false;
   let isoDebounceTimer = null, focusDebounceTimer = null, shutterDebounceTimer = null, lensZoomTimer = null;
   let selectedCameraId = null, knownCameras = [], shutterSteps = [];
+
+  function saveFraming() {
+    try {
+      localStorage.setItem('phonocam-framing', JSON.stringify({
+        fitFrame, fullDiscMode, safeMargin
+      }));
+    } catch (_) { /* storage is optional */ }
+  }
+
+  function loadFraming() {
+    try {
+      const prefs = JSON.parse(localStorage.getItem('phonocam-framing') || 'null');
+      if (prefs) {
+        fitFrame = prefs.fitFrame !== false;
+        fullDiscMode = prefs.fullDiscMode === true;
+        if ([5,8,12].includes(Number(prefs.safeMargin))) safeMargin=Number(prefs.safeMargin);
+      }
+    } catch (_) { /* ignore unavailable or invalid preferences */ }
+    if (fullDiscMode) fitFrame=true;
+  }
+
+  function updateGuideGeometry() {
+    if (!fullDiscMode || !stream || !studioMode) return;
+    const finder = document.getElementById('viewfinder');
+    const v = els.cameraPreview;
+    const width = finder?.clientWidth || 0, height = finder?.clientHeight || 0;
+    const vw = v.videoWidth || 0, vh = v.videoHeight || 0;
+    if (!width || !height) return;
+    // In FIT mode, locate the real video rectangle within the letterboxed preview.
+    const scale = vw > 0 && vh > 0 ? Math.min(width / vw, height / vh) : 1;
+    const pictureW = vw > 0 ? vw * scale : width;
+    const pictureH = vh > 0 ? vh * scale : height;
+    const diameter = Math.max(0,Math.min(pictureW,pictureH)*(1-safeMargin/100*2));
+    els.safeDiscCircle.style.width = diameter + 'px';
+    els.safeDiscCircle.style.height = diameter + 'px';
+    els.safeDiscCircle.style.left = (width-diameter)/2+'px';
+    els.safeDiscCircle.style.top = (height-diameter)/2+'px';
+  }
+
+  function applyFraming() {
+    if (fullDiscMode) fitFrame = true;
+    document.body.classList.toggle('fit-frame',fitFrame);
+    els.hudFit.textContent = fitFrame ? 'FIT' : 'FILL';
+    els.hudFit.classList.toggle('is-active',fitFrame);
+    els.hudFit.setAttribute('aria-label',fitFrame?'Cambiar a FILL (recorta vista previa)':'Cambiar a FIT (sin recorte)');
+    els.hudFit.title = fitFrame?'Vista completa sin recorte':'Llenar la pantalla recortando la vista previa';
+    els.fullDiscButton.classList.toggle('is-active',fullDiscMode);
+    els.fullDiscButton.setAttribute('aria-pressed',String(fullDiscMode));
+    els.fullDiscMenu.hidden = !fullDiscMode || !stream;
+    els.safeDiscGuide.hidden = !fullDiscMode || !stream || !studioMode;
+    els.safeMarginSelect.value=String(safeMargin);
+    els.safeDiscNotice.textContent='Margen '+safeMargin+'% · Guía manual, no detección automática. Centra todo el disco dentro del círculo, incluidos los dibujos exteriores.';
+    updateGuideGeometry();
+  }
+
+  function setFullDisc(enabled) {
+    fullDiscMode=enabled;
+    if (enabled) {
+      fitFrame=true;
+      guideEnabled=false;
+      els.toggleGuide.classList.remove('active');
+      els.guideLayer.hidden=true;
+      els.hudGuides.classList.remove('is-active');
+    }
+    applyFraming();
+    saveFraming();
+    status(enabled
+      ? 'FULL DISC: FIT activo. Centra el disco dentro de la guía; no detectamos bordes automáticamente.'
+      : 'FULL DISC desactivado. El modo de encuadre elegido sigue activo.',
+      'online');
+  }
+
   function setStudioMode(enabled) {
     studioMode = enabled;
     document.body.classList.toggle('studio-mode', enabled);
+    if (els.safeDiscGuide) els.safeDiscGuide.hidden=!enabled||!fullDiscMode||!stream;
+    if (enabled) requestAnimationFrame(updateGuideGeometry);
     if (!enabled) {
       document.body.classList.remove('advanced-open', 'clip-open');
       els.hudAdvanced?.setAttribute('aria-expanded', 'false');
@@ -390,6 +469,7 @@
     els.guideLayer.hidden = !enabled || !guideEnabled;
     els.cameraHud.hidden = !enabled;
     els.lensTool.hidden=!enabled;
+    applyFraming();
     if(!enabled){els.lensMenu.hidden=true;els.lensButton.setAttribute('aria-expanded','false');}
     document.body.classList.toggle('camera-live', enabled);
     if (!enabled) {
@@ -546,6 +626,7 @@
       updateActualSettings();
       setupManualControls();
       await refreshCameraList();
+      requestAnimationFrame(updateGuideGeometry);
       status('Cámara activa. Revisa los FPS efectivos en el monitor.', 'online');
       return true;
     } catch (err) {
@@ -930,18 +1011,28 @@
   els.hudSwapCamera.addEventListener('click', switchCamera);
   els.hudFit.addEventListener('click', () => {
     fitFrame = !fitFrame;
-    document.body.classList.toggle('fit-frame', fitFrame);
-    els.hudFit.textContent = fitFrame ? 'FIT' : 'FILL';
-    els.hudFit.classList.toggle('is-active', fitFrame);
-    els.hudFit.setAttribute('aria-label', fitFrame
-      ? 'Cambiar a llenar el visor' : 'Mostrar el encuadre completo');
-    els.hudFit.title = fitFrame
-      ? 'Ver video llenando la pantalla' : 'Ver cuadro completo sin recorte';
+    if (!fitFrame) fullDiscMode=false;
+    applyFraming();
+    saveFraming();
     status(fitFrame
-      ? 'Modo FIT: se ve todo el encuadre, con barras si es necesario.'
-      : 'Modo FILL: el visor llena la pantalla; la grabación conserva el cuadro completo.',
+      ? 'FIT: se muestra toda la imagen sin recorte visual.'
+      : 'FILL: se recorta SOLO la vista previa. Para proteger los bordes, usa FIT o FULL DISC.',
       'online');
   });
+  els.fullDiscButton.addEventListener('click', () => setFullDisc(!fullDiscMode));
+  els.safeMarginSelect.addEventListener('change', () => {
+    const margin = Number(els.safeMarginSelect.value);
+    if (![5,8,12].includes(margin))return;
+    safeMargin=margin;
+    applyFraming();
+    saveFraming();
+  });
+  els.cameraPreview.addEventListener('loadedmetadata', () => requestAnimationFrame(updateGuideGeometry));
+  window.addEventListener('resize', () => requestAnimationFrame(updateGuideGeometry));
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => updateGuideGeometry());
+    ro.observe(document.getElementById('viewfinder'));
+  }
   els.hudGuides.addEventListener('click', () => els.toggleGuide.click());
   els.hudPower.addEventListener('click', stopCamera);
   els.hudAdvanced.addEventListener('click', toggleAdvanced);
@@ -961,11 +1052,13 @@
   });
 
   loadSync();
+  loadFraming();
   updateSync();
   syncFpsControls();
   if (window.matchMedia('(max-width: 960px)').matches) setStudioMode(true);
   setCameraUI(false);
   resetManualControls();
+  applyFraming();
   if ('serviceWorker' in navigator && window.isSecureContext) {
     navigator.serviceWorker.register('./service-worker.js').catch(() => {});
   }
