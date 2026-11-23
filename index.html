@@ -7,7 +7,7 @@
   <meta name="description" content="PhonoCam: cámara experimental y calculadora de sincronización para phonotropes." />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="./styles.css?v=1.3" />
+  <link rel="stylesheet" href="./styles.css?v=1.4" />
   <title>PhonoCam — Capture motion</title>
 </head>
 <body>
@@ -16,7 +16,7 @@
       <a class="brand" href="./" aria-label="PhonoCam, inicio">
         <span class="brand-icon" aria-hidden="true">◉</span>
         <span>PHONO<span class="brand-accent">CAM</span></span>
-        <span class="brand-version">v1.3</span>
+        <span class="brand-version">v1.4</span>
       </a>
       <span class="topbar-right"><span class="version">FIELD LAB</span><span class="top-dot"></span></span>
     </header>
@@ -93,6 +93,7 @@
                   <button type="button" class="precision-step" id="hudFocusPlus" hidden disabled aria-label="Enfoque, paso hacia el extremo lejano">+</button>
                   <select id="hudFocusSelect" disabled aria-label="Modo de enfoque"><option value="">No disponible</option></select>
                   <button type="button" id="hudFocusAuto" class="focus-auto" disabled>Auto</button>
+                  <button type="button" id="hudFocusRangeToggle" class="focus-range-toggle" hidden disabled aria-label="Cambiar alcance de enfoque">FINO</button>
                 </div>
                 <p id="hudHint">FPS solicitados. Comprueba los FPS reales en LIVE.</p>
               </div>
@@ -167,6 +168,6 @@
       <footer><span>PHONOCAM / OPEN EXPERIMENTAL TOOLS</span><span>CAPTURE IS LOCAL. KEEP MOVING.</span></footer>
     </main>
   </div>
-  <script src="./app.js?v=1.3" defer></script>
+  <script src="./app.js?v=1.4" defer></script>
 </body>
 </html>
