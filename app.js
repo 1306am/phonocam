@@ -34,7 +34,7 @@
     hudFpsTab: $('hudFpsTab'), hudShutterTab: $('hudShutterTab'), hudIsoTab: $('hudIsoTab'),
     hudFocusTab: $('hudFocusTab'), hudFpsLabel: $('hudFpsLabel'), hudShutterLabel: $('hudShutterLabel'),
     hudIsoLabel: $('hudIsoLabel'), hudFocusLabel: $('hudFocusLabel'),
-    hudPresent: $('hudPresent'), exitPresentation: $('exitPresentation'), hudSwapCamera: $('hudSwapCamera'), hudFit: $('hudFit'), hudRecord: $('hudRecord'),
+    hudPresent: $('hudPresent'), presentDesktop: $('presentDesktop'), exitPresentation: $('exitPresentation'), hudSwapCamera: $('hudSwapCamera'), hudFit: $('hudFit'), hudRecord: $('hudRecord'),
     hudClip: $('hudClip'), hudAdvanced: $('hudAdvanced'), hudPower: $('hudPower'),
     closeAdvanced: $('closeAdvanced'), closeClip: $('closeClip'),
   };
@@ -269,6 +269,7 @@
     els.hudRecord.setAttribute('aria-label', recording ? 'Detener grabación' : 'Iniciar grabación');
     els.hudSwapCamera.disabled = recording || !stream;
     els.hudPresent.disabled = !stream;
+    els.presentDesktop.disabled = !stream;
     els.hudPower.disabled = recording || !stream;
     els.hudAdvanced.disabled = recording;
     els.hudClip.hidden = !videoUrl || recording;
@@ -855,6 +856,7 @@
     status(fitFrame?'FIT: encuadre completo.':'FILL: recorte solo de vista previa.','online');
   });
   els.hudPresent.addEventListener('click',presentLive);
+  els.presentDesktop.addEventListener('click',presentLive);
   els.exitPresentation.addEventListener('click',(event)=>{event.stopPropagation?.();leavePresentation();});
   document.getElementById('viewfinder').addEventListener('click',()=>{if(presentationMode)showPresentationExit();});
   document.addEventListener('fullscreenchange',()=>{if(presentationMode&&!document.fullscreenElement)setPresentation(false);});
