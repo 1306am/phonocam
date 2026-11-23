@@ -185,7 +185,7 @@
   function lensLabel(device,idx){
     const name=(device.label||'').trim()||'Cámara '+(idx+1)+' (sin nombre)';
     return /ultra.?wide|ultra.?gran|0[.,]5\s?[x×]|super.?wide/i.test(device.label||'')
-      ? '0.5× · '+name : name;
+      ? 'ULTRA WIDE · '+name : name;
   }
   async function refreshCameraList(){
     if(!navigator.mediaDevices?.enumerateDevices||!stream)return;
