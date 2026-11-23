@@ -267,3 +267,29 @@
     height:clamp(46px,13.5vw,54px);
   }
 }
+
+
+/* v0.6: compact camera-side ISO control and focus-distance slider. */
+.hud-precision,.hud-focus-adjust{display:flex;align-items:center;gap:6px;min-width:0;width:100%}
+.hud-precision input[type=range],.hud-focus-adjust input[type=range]{flex:1 1 auto;min-width:0;width:auto}
+.hud-precision .precision-step{width:34px;min-width:34px;height:34px;display:grid;place-items:center;border:1px solid #68777b;border-radius:8px;background:#28363a;color:#f2f3ef;font-size:22px;font-weight:600;touch-action:manipulation}
+.hud-precision .precision-range{width:53px;min-width:53px;height:34px;display:grid;place-items:center;border:1px solid #657a52;border-radius:8px;background:#34402a;color:#d8f56a;font-size:10px;font-weight:800;letter-spacing:.25px;touch-action:manipulation}
+.hud-precision button:disabled{opacity:.35}
+.hud-focus-adjust select{width:100%}
+@media(max-width:960px){
+  body.studio-mode .hud-adjust{padding:8px 10px 7px}
+  body.studio-mode .hud-precision,body.studio-mode .hud-focus-adjust{display:flex;max-width:100%}
+  body.studio-mode .hud-precision[hidden],body.studio-mode .hud-focus-adjust[hidden],
+  body.studio-mode .hud-focus-adjust input[hidden],body.studio-mode .hud-focus-adjust select[hidden]{display:none!important}
+  body.studio-mode .hud-precision input[type=range],body.studio-mode .hud-focus-adjust input[type=range]{
+    margin:0;flex:1 1 auto;min-width:0;height:36px;min-height:36px;accent-color:#d8f56a
+  }
+  body.studio-mode .hud-precision button{flex:0 0 auto}
+  body.studio-mode .hud-adjust-head{margin-bottom:3px}
+  body.studio-mode .hud-adjust p{margin:3px 0 0}
+  body.studio-mode .setting-row.manual input[type=range]{width:min(180px,48%)}
+}
+@media(max-width:380px){
+  body.studio-mode .hud-precision .precision-step{width:30px;min-width:30px;height:30px}
+  body.studio-mode .hud-precision .precision-range{width:45px;min-width:45px;height:30px;font-size:9px}
+}
