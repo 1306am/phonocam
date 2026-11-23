@@ -28,6 +28,9 @@
     lensTool: $('lensTool'), lensButton: $('lensButton'), lensMenu: $('lensMenu'),
     lensSelect: $('lensSelect'), lensHint: $('lensHint'), lensZoomGroup: $('lensZoomGroup'),
     lensZoomRange: $('lensZoomRange'), lensZoomValue: $('lensZoomValue'), lensZoomHint: $('lensZoomHint'),
+    hudFpsControls: $('hudFpsControls'), hudFpsMinus: $('hudFpsMinus'), hudFpsPlus: $('hudFpsPlus'),
+    hudFocusMinus: $('hudFocusMinus'), hudFocusPlus: $('hudFocusPlus'),
+    hudSaveVideo: $('hudSaveVideo'),
     hudIsoRange: $('hudIsoRange'), hudIsoControls: $('hudIsoControls'),
     hudIsoMinus: $('hudIsoMinus'), hudIsoPlus: $('hudIsoPlus'), hudIsoRangeToggle: $('hudIsoRangeToggle'),
     hudFocusSelect: $('hudFocusSelect'), hudFocusControls: $('hudFocusControls'), hudFocusRange: $('hudFocusRange'),
@@ -198,11 +201,15 @@
       els.lensSelect.replaceChildren(...list);
       els.lensSelect.value=selectedCameraId||(facingMode==='user'?'auto-front':'auto-rear');
       const wide=knownCameras.filter(c=>/ultra.?wide|ultra.?gran|0[.,]5\s?[x×]|super.?wide/i.test(c.label||''));
+      const rear=(knownCameras||[]).filter(c=>/rear|back|trasera|posterior/i.test(c.label||''));
+      const fronts=(knownCameras||[]).filter(c=>/front|frontal|user/i.test(c.label||''));
       els.lensHint.textContent=wide.length
-        ? 'Hay cámaras etiquetadas como ultra gran angular. Selecciona una y comprueba la imagen.'
-        : knownCameras.length>1
-          ? knownCameras.length+' cámaras disponibles. Las etiquetas pueden ser genéricas: compara el campo visual.'
-          : 'Chrome expone '+knownCameras.length+' cámara(s). Si el ultra wide no aparece, no podemos forzarlo desde el navegador.';
+        ? 'Se encontró un lente llamado «ultra wide». Selecciónalo y verifica el campo visual.'
+        : knownCameras.length <= 2 && (fronts.length||rear.length)
+          ? 'Chrome solo expone '+knownCameras.length+' cámara(s) identificables. El ultra gran angular no aparece por separado. No se puede habilitar con un selector web.'
+          : knownCameras.length>1
+            ? knownCameras.length+' cámaras disponibles, algunas sin nombre específico. Compara sus encuadres; puede que Chrome agrupe varios lentes en una sola trasera.'
+            : 'Chrome expone '+knownCameras.length+' cámara(s). No es posible forzar la ultra gran angular si el navegador no la ofrece.';
       const id=videoTrack?.getSettings?.()?.deviceId;
       const current=knownCameras.find(c=>c.deviceId===id);
       if(current&&!selectedCameraId)els.lensHint.textContent+=' Actual: '+(current.label||'predeterminada')+'.';
@@ -260,6 +267,8 @@
     const i = supportedFps.indexOf(fps);
     if (i >= 0) els.hudFpsRange.value = String(i);
     els.hudFpsRange.disabled = recording || !stream;
+    els.hudFpsMinus.disabled = els.hudFpsRange.disabled;
+    els.hudFpsPlus.disabled = els.hudFpsRange.disabled;
     els.hudFpsLabel.textContent = String(fps);
     mirrorOptions(els.exposureSelect, els.hudShutterSelect);
     updateShutterSlider();
@@ -277,6 +286,10 @@
     els.hudFocusRange.value = els.focusDistanceRange.value;
     els.hudFocusRange.disabled = recording || !manualFocusDistance;
     els.hudFocusRange.hidden = !manualFocusDistance;
+    els.hudFocusMinus.hidden = !manualFocusDistance;
+    els.hudFocusPlus.hidden = !manualFocusDistance;
+    els.hudFocusMinus.disabled = els.hudFocusRange.disabled;
+    els.hudFocusPlus.disabled = els.hudFocusRange.disabled;
     els.hudFocusSelect.hidden = manualFocusDistance;
     els.hudShutterLabel.textContent = els.exposureSelect.disabled ? '—'
       : (els.exposureSelect.value ? '1/' + els.exposureSelect.value : 'SET');
@@ -301,12 +314,13 @@
     els.hudAdvanced.disabled = recording;
     els.hudGuides.classList.toggle('is-active', guideEnabled);
     els.hudClip.hidden = !videoUrl || recording;
+    els.hudSaveVideo.hidden = !videoUrl || recording;
     updateHudMode();
   }
 
   function updateHudMode() {
     const config = {
-      fps: { tab: els.hudFpsTab, input: els.hudFpsRange, name: 'FRAME RATE', label: els.hudFpsLabel },
+      fps: { tab: els.hudFpsTab, input: els.hudFpsControls, control: els.hudFpsRange, name: 'FRAME RATE', label: els.hudFpsLabel },
       shutter: { tab: els.hudShutterTab, input: els.hudShutterControls, control: els.hudShutterRange, name: 'SHUTTER · AJUSTE FINO', label: els.hudShutterLabel },
       iso: { tab: els.hudIsoTab, input: els.hudIsoControls, control: els.hudIsoRange, name: 'ISO · AJUSTE FINO', label: els.hudIsoLabel },
       focus: { tab: els.hudFocusTab, input: els.hudFocusControls, control: manualFocusDistance ? els.hudFocusRange : els.hudFocusSelect, name: manualFocusDistance ? 'FOCUS · DISTANCIA MANUAL' : 'FOCUS MODE', label: els.hudFocusLabel }
@@ -805,6 +819,20 @@
     syncFpsControls();
     applyCaptureSettings();
   });
+  [els.hudFpsMinus, els.hudFpsPlus].forEach((button, index) => {
+    button.addEventListener('click', () => {
+      if (els.hudFpsRange.disabled) return;
+      const oldIndex = Number(els.hudFpsRange.value);
+      const nextIndex = clamp(oldIndex + (index === 0 ? -1 : 1), 0, supportedFps.length - 1);
+      if (nextIndex === oldIndex) return;
+      const fps = supportedFps[nextIndex];
+      els.hudFpsRange.value = String(nextIndex);
+      els.hudFpsLabel.textContent = String(fps);
+      els.fpsSelect.value = String(fps);
+      syncFpsControls();
+      applyCaptureSettings();
+    });
+  });
   els.hudShutterSelect.addEventListener('change', () => {
     els.exposureSelect.value = els.hudShutterSelect.value;
     els.exposureSelect.dispatchEvent(new Event('change'));
@@ -876,6 +904,17 @@
     clearTimeout(focusDebounceTimer);
     applyFocusFromHud(Number(els.hudFocusRange.value));
   });
+  [els.hudFocusMinus, els.hudFocusPlus].forEach((button, index) => {
+    button.addEventListener('click', () => {
+      if (!manualFocusDistance || els.hudFocusRange.disabled) return;
+      clearTimeout(focusDebounceTimer);
+      const range = els.hudFocusRange;
+      const step = Number(range.step) > 0 ? Number(range.step) : (Number(range.max)-Number(range.min))/100;
+      const nextValue = clamp(Number(range.value) + (index === 0 ? -step : step), Number(range.min), Number(range.max));
+      if (Math.abs(nextValue-Number(range.value))<1e-9) return;
+      applyFocusFromHud(nextValue);
+    });
+  });
   els.focusDistanceRange.addEventListener('change', () => {
     if (!manualFocusDistance) return;
     const requested = Number(els.focusDistanceRange.value);
@@ -908,6 +947,12 @@
   els.hudAdvanced.addEventListener('click', toggleAdvanced);
   els.closeAdvanced.addEventListener('click', closeAdvanced);
   els.hudClip.addEventListener('click', openClip);
+  els.hudSaveVideo.addEventListener('click', () => {
+    if (!videoUrl || recorder?.state === 'recording') return;
+    // A real user tap initiates the same file download as the clip-panel link.
+    els.downloadVideo.click();
+    status('Descarga solicitada. Revisa la carpeta Descargas del teléfono.', 'online');
+  });
   els.closeClip.addEventListener('click', () => document.body.classList.remove('clip-open'));
   window.addEventListener('pagehide', () => {
     clearTimeout(isoDebounceTimer); clearTimeout(focusDebounceTimer); clearTimeout(shutterDebounceTimer);clearTimeout(lensZoomTimer);
