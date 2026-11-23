@@ -5,7 +5,7 @@
   const els = {
     cameraPreview: $('cameraPreview'), cameraEmpty: $('cameraEmpty'), cameraState: $('cameraState'),
     startCamera: $('startCamera'), stopCamera: $('stopCamera'), switchCamera: $('switchCamera'),
-    toggleGuide: $('toggleGuide'), guideLayer: $('guideLayer'), viewfinderTop: $('viewfinderTop'),
+    viewfinderTop: $('viewfinderTop'),
     viewfinderBottom: $('viewfinderBottom'), actualResolution: $('actualResolution'), actualFps: $('actualFps'),
     statusText: $('statusText'), statusLine: document.querySelector('.status-line'),
     recordButton: $('recordButton'), recState: $('recState'), recTimer: $('recTimer'),
@@ -25,12 +25,6 @@
     hudHint: $('hudHint'), hudFpsRange: $('hudFpsRange'), hudShutterSelect: $('hudShutterSelect'),
     hudShutterControls: $('hudShutterControls'), hudShutterRange: $('hudShutterRange'),
     hudShutterMinus: $('hudShutterMinus'), hudShutterPlus: $('hudShutterPlus'),
-    lensTool: $('lensTool'), lensButton: $('lensButton'), lensMenu: $('lensMenu'),
-    lensSelect: $('lensSelect'), lensHint: $('lensHint'), lensZoomGroup: $('lensZoomGroup'),
-    lensZoomRange: $('lensZoomRange'), lensZoomValue: $('lensZoomValue'), lensZoomHint: $('lensZoomHint'),
-    fullDiscButton: $('fullDiscButton'), fullDiscMenu: $('fullDiscMenu'),
-    safeMarginSelect: $('safeMarginSelect'), safeDiscNotice: $('safeDiscNotice'),
-    safeDiscGuide: $('safeDiscGuide'), safeDiscCircle: $('safeDiscCircle'),
     hudFpsControls: $('hudFpsControls'), hudFpsMinus: $('hudFpsMinus'), hudFpsPlus: $('hudFpsPlus'),
     hudFocusMinus: $('hudFocusMinus'), hudFocusPlus: $('hudFocusPlus'),
     hudSaveVideo: $('hudSaveVideo'),
@@ -40,97 +34,53 @@
     hudFpsTab: $('hudFpsTab'), hudShutterTab: $('hudShutterTab'), hudIsoTab: $('hudIsoTab'),
     hudFocusTab: $('hudFocusTab'), hudFpsLabel: $('hudFpsLabel'), hudShutterLabel: $('hudShutterLabel'),
     hudIsoLabel: $('hudIsoLabel'), hudFocusLabel: $('hudFocusLabel'),
-    hudGuides: $('hudGuides'), hudSwapCamera: $('hudSwapCamera'), hudFit: $('hudFit'), hudRecord: $('hudRecord'),
+    hudPresent: $('hudPresent'), exitPresentation: $('exitPresentation'), hudSwapCamera: $('hudSwapCamera'), hudFit: $('hudFit'), hudRecord: $('hudRecord'),
     hudClip: $('hudClip'), hudAdvanced: $('hudAdvanced'), hudPower: $('hudPower'),
     closeAdvanced: $('closeAdvanced'), closeClip: $('closeClip'),
   };
   const supportedFps = [12, 15, 24, 25, 30, 60];
   let studioMode = false;
   let hudMode = 'fps';
-  let fitFrame = true;
-  let fullDiscMode = false;
-  let safeMargin = 8;
-  let isoFineMode = true;
-  let manualFocusDistance = false;
-  let isoDebounceTimer = null, focusDebounceTimer = null, shutterDebounceTimer = null, lensZoomTimer = null;
-  let selectedCameraId = null, knownCameras = [], shutterSteps = [];
-
-  function saveFraming() {
-    try {
-      localStorage.setItem('phonocam-framing', JSON.stringify({
-        fitFrame, fullDiscMode, safeMargin
-      }));
-    } catch (_) { /* storage is optional */ }
-  }
-
-  function loadFraming() {
-    try {
-      const prefs = JSON.parse(localStorage.getItem('phonocam-framing') || 'null');
-      if (prefs) {
-        fitFrame = prefs.fitFrame !== false;
-        fullDiscMode = prefs.fullDiscMode === true;
-        if ([5,8,12].includes(Number(prefs.safeMargin))) safeMargin=Number(prefs.safeMargin);
-      }
-    } catch (_) { /* ignore unavailable or invalid preferences */ }
-    if (fullDiscMode) fitFrame=true;
-  }
-
-  function updateGuideGeometry() {
-    if (!fullDiscMode || !stream || !studioMode) return;
-    const finder = document.getElementById('viewfinder');
-    const v = els.cameraPreview;
-    const width = finder?.clientWidth || 0, height = finder?.clientHeight || 0;
-    const vw = v.videoWidth || 0, vh = v.videoHeight || 0;
-    if (!width || !height) return;
-    // In FIT mode, locate the real video rectangle within the letterboxed preview.
-    const scale = vw > 0 && vh > 0 ? Math.min(width / vw, height / vh) : 1;
-    const pictureW = vw > 0 ? vw * scale : width;
-    const pictureH = vh > 0 ? vh * scale : height;
-    const diameter = Math.max(0,Math.min(pictureW,pictureH)*(1-safeMargin/100*2));
-    els.safeDiscCircle.style.width = diameter + 'px';
-    els.safeDiscCircle.style.height = diameter + 'px';
-    els.safeDiscCircle.style.left = (width-diameter)/2+'px';
-    els.safeDiscCircle.style.top = (height-diameter)/2+'px';
-  }
-
-  function applyFraming() {
-    if (fullDiscMode) fitFrame = true;
+  let fitFrame=true, isoFineMode=true, manualFocusDistance=false;
+  let isoDebounceTimer=null,focusDebounceTimer=null,shutterDebounceTimer=null;
+  let shutterSteps=[], presentationMode=false, presentationExitTimer=null;
+  function saveFraming(){try{localStorage.setItem('phonocam-framing',JSON.stringify({fitFrame}));}catch(_){}}
+  function loadFraming(){try{const p=JSON.parse(localStorage.getItem('phonocam-framing')||'null');if(p&&typeof p.fitFrame==='boolean')fitFrame=p.fitFrame;}catch(_){}}
+  function applyFraming(){
     document.body.classList.toggle('fit-frame',fitFrame);
-    els.hudFit.textContent = fitFrame ? 'FIT' : 'FILL';
+    els.hudFit.textContent=fitFrame?'FIT':'FILL';
     els.hudFit.classList.toggle('is-active',fitFrame);
-    els.hudFit.setAttribute('aria-label',fitFrame?'Cambiar a FILL (recorta vista previa)':'Cambiar a FIT (sin recorte)');
-    els.hudFit.title = fitFrame?'Vista completa sin recorte':'Llenar la pantalla recortando la vista previa';
-    els.fullDiscButton.classList.toggle('is-active',fullDiscMode);
-    els.fullDiscButton.setAttribute('aria-pressed',String(fullDiscMode));
-    els.fullDiscMenu.hidden = !fullDiscMode || !stream;
-    els.safeDiscGuide.hidden = !fullDiscMode || !stream || !studioMode;
-    els.safeMarginSelect.value=String(safeMargin);
-    els.safeDiscNotice.textContent='Margen '+safeMargin+'% · Guía manual, no detección automática. Centra todo el disco dentro del círculo, incluidos los dibujos exteriores.';
-    updateGuideGeometry();
+    els.hudFit.setAttribute('aria-label',fitFrame?'Cambiar a FILL':'Cambiar a FIT');
+    els.hudFit.title=fitFrame?'Imagen completa':'Llenar visor con recorte visual';
   }
-
-  function setFullDisc(enabled) {
-    fullDiscMode=enabled;
-    if (enabled) {
-      fitFrame=true;
-      guideEnabled=false;
-      els.toggleGuide.classList.remove('active');
-      els.guideLayer.hidden=true;
-      els.hudGuides.classList.remove('is-active');
-    }
-    applyFraming();
-    saveFraming();
-    status(enabled
-      ? 'FULL DISC: FIT activo. Centra el disco dentro de la guía; no detectamos bordes automáticamente.'
-      : 'FULL DISC desactivado. El modo de encuadre elegido sigue activo.',
-      'online');
+  function showPresentationExit(){
+    if(!presentationMode)return;
+    els.exitPresentation.hidden=false;
+    els.exitPresentation.classList.add('is-visible');
+    clearTimeout(presentationExitTimer);
+    presentationExitTimer=setTimeout(()=>{if(presentationMode)els.exitPresentation.classList.remove('is-visible');},3500);
   }
-
+  function setPresentation(active){
+    presentationMode=active;
+    document.body.classList.toggle('presentation-mode',active);
+    if(active){els.exitPresentation.hidden=false;showPresentationExit();}
+    else{clearTimeout(presentationExitTimer);els.exitPresentation.classList.remove('is-visible');els.exitPresentation.hidden=true;}
+  }
+  async function leavePresentation(){
+    setPresentation(false);
+    if(document.fullscreenElement && document.exitFullscreen)try{await document.exitFullscreen();}catch(_){}
+  }
+  async function presentLive(){
+    if(!stream||presentationMode)return;
+    closeAdvanced();document.body.classList.remove('clip-open');
+    setPresentation(true);
+    const finder=document.getElementById('viewfinder');
+    if(finder.requestFullscreen)try{await finder.requestFullscreen({navigationUI:'hide'});}
+    catch(_){status('El navegador no permitió fullscreen nativo; se usa pantalla completa dentro de la app.','online');}
+  }
   function setStudioMode(enabled) {
     studioMode = enabled;
     document.body.classList.toggle('studio-mode', enabled);
-    if (els.safeDiscGuide) els.safeDiscGuide.hidden=!enabled||!fullDiscMode||!stream;
-    if (enabled) requestAnimationFrame(updateGuideGeometry);
     if (!enabled) {
       document.body.classList.remove('advanced-open', 'clip-open');
       els.hudAdvanced?.setAttribute('aria-expanded', 'false');
@@ -152,7 +102,7 @@
   }
   let stream = null, videoTrack = null, facingMode = 'environment';
   let recorder = null, parts = [], recordingStarted = 0, timerId = null, videoUrl = null;
-  let guideEnabled = true, busy = false, currentCapabilities = {};
+  let busy = false, currentCapabilities = {};
   let syncRecommendation = 24;
   const presets = [30,40,50,60,80,100,125,160,200,250,320,400,500,640,800,1000,1250,1600,2000,2500,3200,4000,5000,6400,8000];
 
@@ -264,74 +214,6 @@
     applyManual({exposureMode:'manual',exposureTime:units},'exposureTime',units)
       .then(()=>renderHud());
   }
-  function lensLabel(device,idx){
-    const name=(device.label||'').trim()||'Cámara '+(idx+1)+' (sin nombre)';
-    return /ultra.?wide|ultra.?gran|0[.,]5\s?[x×]|super.?wide/i.test(device.label||'')
-      ? 'ULTRA WIDE · '+name : name;
-  }
-  async function refreshCameraList(){
-    if(!navigator.mediaDevices?.enumerateDevices||!stream)return;
-    try{
-      knownCameras=(await navigator.mediaDevices.enumerateDevices())
-        .filter(c=>c.kind==='videoinput'&&c.deviceId);
-      const list=[new Option('Trasera (automática)','auto-rear'),
-        new Option('Frontal (automática)','auto-front')];
-      knownCameras.forEach((c,i)=>list.push(new Option(lensLabel(c,i),c.deviceId)));
-      els.lensSelect.replaceChildren(...list);
-      els.lensSelect.value=selectedCameraId||(facingMode==='user'?'auto-front':'auto-rear');
-      const wide=knownCameras.filter(c=>/ultra.?wide|ultra.?gran|0[.,]5\s?[x×]|super.?wide/i.test(c.label||''));
-      const rear=(knownCameras||[]).filter(c=>/rear|back|trasera|posterior/i.test(c.label||''));
-      const fronts=(knownCameras||[]).filter(c=>/front|frontal|user/i.test(c.label||''));
-      els.lensHint.textContent=wide.length
-        ? 'Se encontró un lente llamado «ultra wide». Selecciónalo y verifica el campo visual.'
-        : knownCameras.length <= 2 && (fronts.length||rear.length)
-          ? 'Chrome solo expone '+knownCameras.length+' cámara(s) identificables. El ultra gran angular no aparece por separado. No se puede habilitar con un selector web.'
-          : knownCameras.length>1
-            ? knownCameras.length+' cámaras disponibles, algunas sin nombre específico. Compara sus encuadres; puede que Chrome agrupe varios lentes en una sola trasera.'
-            : 'Chrome expone '+knownCameras.length+' cámara(s). No es posible forzar la ultra gran angular si el navegador no la ofrece.';
-      const id=videoTrack?.getSettings?.()?.deviceId;
-      const current=knownCameras.find(c=>c.deviceId===id);
-      if(current&&!selectedCameraId)els.lensHint.textContent+=' Actual: '+(current.label||'predeterminada')+'.';
-    }catch(e){els.lensHint.textContent='No fue posible listar las cámaras: '+(e.message||e.name||'error')+'.';}
-  }
-  function setupZoomControl(){
-    const cap=currentCapabilities.zoom;
-    const available=isNumberRange(cap)&&cap.max>cap.min;
-    els.lensZoomGroup.hidden=!available;
-    els.lensZoomRange.disabled=!available||recorder?.state==='recording';
-    if(!available)return;
-    els.lensZoomRange.min=String(cap.min);
-    els.lensZoomRange.max=String(cap.max);
-    els.lensZoomRange.step=String(cap.step>0?cap.step:0.1);
-    const z=videoTrack?.getSettings?.()?.zoom;
-    els.lensZoomRange.value=String(clamp(Number.isFinite(z)?z:1,cap.min,cap.max));
-    els.lensZoomValue.textContent=round2(Number(els.lensZoomRange.value))+'×';
-    els.lensZoomHint.textContent=cap.min<1
-      ? 'La cámara permite bajar de 1×; comprueba si realmente amplía el encuadre.'
-      : 'El zoom parte de '+round2(cap.min)+'×: no equivale al lente ultra gran angular.';
-  }
-  async function selectCameraFromMenu(choice){
-    if(busy||recorder?.state==='recording'||!stream)return;
-    const previousId=selectedCameraId, previousFacing=facingMode;
-    if(choice==='auto-rear'){selectedCameraId=null;facingMode='environment';}
-    else if(choice==='auto-front'){selectedCameraId=null;facingMode='user';}
-    else selectedCameraId=choice;
-    els.lensSelect.disabled=true;
-    cleanupStream();
-    const success=await startCamera();
-    if(!success){
-      selectedCameraId=previousId;facingMode=previousFacing;
-      await startCamera();
-      status('No se pudo seleccionar ese lente; se intentó restaurar el anterior.','error');
-    }else{
-      const chosen=knownCameras.find(c=>c.deviceId===selectedCameraId);
-      status('Cámara: '+(chosen?.label||(selectedCameraId?'seleccionada':'automática'))+'. Comprueba el encuadre.','online');
-    }
-    els.lensSelect.disabled=false;
-    els.lensMenu.hidden=true;
-    els.lensButton.setAttribute('aria-expanded','false');
-  }
-
   // Overlay controls mirror the same native browser constraints as the full settings.
   // The HUD overlays the preview only; none of these elements are written to the video file.
   function mirrorOptions(source, destination) {
@@ -386,12 +268,9 @@
     els.hudRecord.disabled = !stream || els.recordButton.disabled;
     els.hudRecord.setAttribute('aria-label', recording ? 'Detener grabación' : 'Iniciar grabación');
     els.hudSwapCamera.disabled = recording || !stream;
+    els.hudPresent.disabled = !stream;
     els.hudPower.disabled = recording || !stream;
-    els.lensButton.disabled=recording||!stream;
-    els.lensSelect.disabled=recording||!stream;
-    if(!els.lensZoomGroup.hidden)els.lensZoomRange.disabled=recording||!stream;
     els.hudAdvanced.disabled = recording;
-    els.hudGuides.classList.toggle('is-active', guideEnabled);
     els.hudClip.hidden = !videoUrl || recording;
     els.hudSaveVideo.hidden = !videoUrl || recording;
     updateHudMode();
@@ -466,11 +345,8 @@
     els.cameraPreview.style.display = enabled ? 'block' : 'none';
     els.viewfinderTop.hidden = !enabled;
     els.viewfinderBottom.hidden = !enabled;
-    els.guideLayer.hidden = !enabled || !guideEnabled;
     els.cameraHud.hidden = !enabled;
-    els.lensTool.hidden=!enabled;
     applyFraming();
-    if(!enabled){els.lensMenu.hidden=true;els.lensButton.setAttribute('aria-expanded','false');}
     document.body.classList.toggle('camera-live', enabled);
     if (!enabled) {
       closeAdvanced();
@@ -497,7 +373,6 @@
   function resetManualControls() {
     currentCapabilities = {};
     shutterSteps=[];
-    els.lensZoomGroup.hidden=true;
     els.exposureSelect.replaceChildren(new Option('No disponible', ''));
     els.focusSelect.replaceChildren(new Option('No disponible', ''));
     els.exposureSelect.disabled = true;
@@ -577,7 +452,6 @@
       els.manualBadge.classList.add('supported');
       els.manualNote.textContent = 'Los ajustes se envían al hardware. Comprueba el mensaje de confirmación: si el navegador no reporta el valor aplicado, no podemos verificar el cambio.';
     }
-    setupZoomControl();
     renderHud();
   }
 
@@ -610,14 +484,13 @@
     els.startCamera.disabled = true;
     status('Solicitando permiso para utilizar la cámara…');
     const [width, height] = els.resolutionSelect.value.split('x').map(Number);
-    const video = { ...(selectedCameraId?{deviceId:{exact:selectedCameraId}}:{facingMode:{ideal:facingMode}}),
-      width:{ideal:width},height:{ideal:height},frameRate:{ideal:Number(els.fpsSelect.value)} };
+    const video={facingMode:{ideal:facingMode},width:{ideal:width},height:{ideal:height},frameRate:{ideal:Number(els.fpsSelect.value)}};
     try {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
       } catch (firstError) {
         // Fallback for a device/browser that rejects requested capture settings.
-        stream = await navigator.mediaDevices.getUserMedia({ video: selectedCameraId?{deviceId:{exact:selectedCameraId}}:{facingMode:{ideal:facingMode}}, audio: false });
+        stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facingMode}},audio:false});
       }
       videoTrack = stream.getVideoTracks()[0];
       els.cameraPreview.srcObject = stream;
@@ -625,8 +498,6 @@
       setCameraUI(true);
       updateActualSettings();
       setupManualControls();
-      await refreshCameraList();
-      requestAnimationFrame(updateGuideGeometry);
       status('Cámara activa. Revisa los FPS efectivos en el monitor.', 'online');
       return true;
     } catch (err) {
@@ -640,6 +511,7 @@
   }
 
   function cleanupStream() {
+    if(presentationMode)leavePresentation();
     if (stream) stream.getTracks().forEach((track) => track.stop());
     stream = null; videoTrack = null;
     els.cameraPreview.pause();
@@ -715,8 +587,6 @@
       els.exposureSelect.disabled = true;
       els.isoRange.disabled = true;
       els.focusSelect.disabled = true;
-      els.lensButton.disabled=true;els.lensSelect.disabled=true;els.lensZoomRange.disabled=true;
-      els.lensMenu.hidden=true;
       closeAdvanced();
       document.body.classList.remove('clip-open');
       renderHud();
@@ -770,7 +640,6 @@
   async function switchCamera() {
     if (recorder?.state === 'recording' || busy) return;
     cleanupStream();
-    selectedCameraId=null;
     facingMode = facingMode === 'environment' ? 'user' : 'environment';
     await startCamera();
   }
@@ -833,12 +702,6 @@
   els.stopCamera.addEventListener('click', stopCamera);
   els.switchCamera.addEventListener('click', switchCamera);
   els.recordButton.addEventListener('click', toggleRecording);
-  els.toggleGuide.addEventListener('click', () => {
-    guideEnabled = !guideEnabled;
-    els.toggleGuide.classList.toggle('active', guideEnabled);
-    els.guideLayer.hidden = !guideEnabled || !stream;
-    els.hudGuides.classList.toggle('is-active', guideEnabled);
-  });
   els.captureTab.addEventListener('click', () => changeTab('capture'));
   els.syncTab.addEventListener('click', () => changeTab('sync'));
   els.fpsSelect.addEventListener('change', () => { syncFpsControls(); applyCaptureSettings(); });
@@ -935,28 +798,6 @@
     clearTimeout(shutterDebounceTimer);
     applyShutterIndex(Number(els.hudShutterRange.value)+(i===0?-1:1));
   }));
-  els.lensButton.addEventListener('click',()=>{
-    if(!stream||recorder?.state==='recording')return;
-    els.lensMenu.hidden=!els.lensMenu.hidden;
-    els.lensButton.setAttribute('aria-expanded',String(!els.lensMenu.hidden));
-  });
-  els.lensSelect.addEventListener('change',()=>selectCameraFromMenu(els.lensSelect.value));
-  function applyLensZoom(){
-    if(els.lensZoomRange.disabled)return;
-    const val=Number(els.lensZoomRange.value);
-    applyManual({zoom:val},'zoom',val).then(()=>{
-      const real=videoTrack?.getSettings?.()?.zoom;
-      els.lensZoomValue.textContent=Number.isFinite(real)?round2(real)+'×':'sin verificar';
-    });
-  }
-  els.lensZoomRange.addEventListener('input',()=>{
-    els.lensZoomValue.textContent=round2(Number(els.lensZoomRange.value))+'× · pendiente';
-    clearTimeout(lensZoomTimer);
-    lensZoomTimer=setTimeout(applyLensZoom,160);
-  });
-  els.lensZoomRange.addEventListener('change',()=>{
-    clearTimeout(lensZoomTimer);applyLensZoom();
-  });
   els.hudIsoRange.addEventListener('input', () => {
     els.hudValue.textContent = Math.round(Number(els.hudIsoRange.value)) + ' · pendiente';
     clearTimeout(isoDebounceTimer);
@@ -1009,31 +850,15 @@
   });
   els.hudRecord.addEventListener('click', toggleRecording);
   els.hudSwapCamera.addEventListener('click', switchCamera);
-  els.hudFit.addEventListener('click', () => {
-    fitFrame = !fitFrame;
-    if (!fitFrame) fullDiscMode=false;
-    applyFraming();
-    saveFraming();
-    status(fitFrame
-      ? 'FIT: se muestra toda la imagen sin recorte visual.'
-      : 'FILL: se recorta SOLO la vista previa. Para proteger los bordes, usa FIT o FULL DISC.',
-      'online');
+  els.hudFit.addEventListener('click',()=>{
+    fitFrame=!fitFrame;applyFraming();saveFraming();
+    status(fitFrame?'FIT: encuadre completo.':'FILL: recorte solo de vista previa.','online');
   });
-  els.fullDiscButton.addEventListener('click', () => setFullDisc(!fullDiscMode));
-  els.safeMarginSelect.addEventListener('change', () => {
-    const margin = Number(els.safeMarginSelect.value);
-    if (![5,8,12].includes(margin))return;
-    safeMargin=margin;
-    applyFraming();
-    saveFraming();
-  });
-  els.cameraPreview.addEventListener('loadedmetadata', () => requestAnimationFrame(updateGuideGeometry));
-  window.addEventListener('resize', () => requestAnimationFrame(updateGuideGeometry));
-  if (typeof ResizeObserver !== 'undefined') {
-    const ro = new ResizeObserver(() => updateGuideGeometry());
-    ro.observe(document.getElementById('viewfinder'));
-  }
-  els.hudGuides.addEventListener('click', () => els.toggleGuide.click());
+  els.hudPresent.addEventListener('click',presentLive);
+  els.exitPresentation.addEventListener('click',(event)=>{event.stopPropagation?.();leavePresentation();});
+  document.getElementById('viewfinder').addEventListener('click',()=>{if(presentationMode)showPresentationExit();});
+  document.addEventListener('fullscreenchange',()=>{if(presentationMode&&!document.fullscreenElement)setPresentation(false);});
+  document.addEventListener('keydown',(event)=>{if(presentationMode&&event.key==='Escape')leavePresentation();});
   els.hudPower.addEventListener('click', stopCamera);
   els.hudAdvanced.addEventListener('click', toggleAdvanced);
   els.closeAdvanced.addEventListener('click', closeAdvanced);
@@ -1046,7 +871,7 @@
   });
   els.closeClip.addEventListener('click', () => document.body.classList.remove('clip-open'));
   window.addEventListener('pagehide', () => {
-    clearTimeout(isoDebounceTimer); clearTimeout(focusDebounceTimer); clearTimeout(shutterDebounceTimer);clearTimeout(lensZoomTimer);
+    clearTimeout(isoDebounceTimer);clearTimeout(focusDebounceTimer);clearTimeout(shutterDebounceTimer);clearTimeout(presentationExitTimer);
     if (recorder?.state === 'recording') { try { recorder.stop(); } catch (_) {} }
     cleanupStream();
   });
