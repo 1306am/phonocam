@@ -463,3 +463,16 @@ body.presentation-mode .viewfinder:not(:fullscreen) video#cameraPreview{
 }
 body.presentation-mode{overflow:hidden!important;background:#000!important}
 body.studio-mode .hud-present{color:#d8f56a;border-color:#d8f56a}
+
+.present-desktop{border:1px solid #85986f;border-radius:8px;background:#253128;color:#d8f56a;font-size:11px;font-weight:800;letter-spacing:.3px;min-height:32px;padding:5px 9px}
+@media(max-width:960px){
+ .present-desktop{display:none}
+ body.studio-mode .hud-present{
+  width:clamp(61px,16vw,78px)!important;flex:0 0 auto!important;
+  font-size:10px!important;letter-spacing:0;padding:0 4px;
+  border-radius:12px!important;white-space:nowrap;
+ }
+}
+@media(max-width:380px){
+ body.studio-mode .hud-present{width:52px!important;font-size:9px!important}
+}
