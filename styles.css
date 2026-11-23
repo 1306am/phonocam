@@ -293,3 +293,26 @@
   body.studio-mode .hud-precision .precision-step{width:30px;min-width:30px;height:30px}
   body.studio-mode .hud-precision .precision-range{width:45px;min-width:45px;height:30px;font-size:9px}
 }
+
+
+/* PhonoCam v0.7 — Lens switcher and precision shutter inside the camera. */
+.lens-tool{position:absolute;z-index:14;right:10px;top:56px;pointer-events:auto;max-width:min(290px,calc(100% - 20px))}
+.lens-button{display:flex;align-items:center;gap:8px;justify-content:center;min-height:35px;padding:8px 11px;border:1px solid #b6c5a75e;border-radius:9px;background:#111b23db;backdrop-filter:blur(12px);color:var(--accent);font-weight:800;font-size:11px;letter-spacing:.9px;touch-action:manipulation}
+.lens-button:disabled{opacity:.45}
+.lens-menu{margin-top:6px;width:min(290px,75vw);padding:12px;border:1px solid #62755e;border-radius:12px;background:#121d25f5;backdrop-filter:blur(16px);box-shadow:0 15px 40px #000b;color:#e4ebe8}
+.lens-menu label{display:block;color:#b5c5ab;font-size:10px;font-weight:800;letter-spacing:1px;margin-bottom:8px}
+.lens-menu select{width:100%;min-height:43px;border-radius:8px;border:1px solid #677680;background:#293741;color:#f0f5f2;font-size:13px;padding:8px}
+.lens-menu p{margin:8px 0 0;font-size:11px;line-height:1.4;color:#bec8ca}
+.lens-menu .lens-note{color:#9dabaa;font-size:10px}
+.hud-shutter-controls{display:flex;align-items:center;width:100%;gap:7px}
+.hud-shutter-controls input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
+@media(max-width:960px){
+  body.studio-mode .lens-tool{top:43px;right:max(10px,env(safe-area-inset-right))}
+  body.studio-mode .lens-menu{max-width:calc(100vw - 30px)}
+  body.studio-mode .hud-shutter-controls[hidden],body.studio-mode .hud-shutter-controls select[hidden]{display:none!important}
+  body.studio-mode .hud-shutter-controls input[type=range]{min-width:0;flex:1;height:36px}
+  body.studio-mode .lens-button{min-height:38px}
+}
+@media(max-width:420px){
+  body.studio-mode .lens-tool{top:40px}
+}
