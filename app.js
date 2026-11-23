@@ -274,7 +274,7 @@
     els.hudFocusPlus.hidden = !manualFocusDistance;
     els.hudFocusMinus.disabled = els.hudFocusRange.disabled;
     els.hudFocusPlus.disabled = els.hudFocusRange.disabled;
-    els.hudFocusSelect.hidden = false;
+    els.hudFocusSelect.hidden = manualFocusDistance;
     els.hudFocusAuto.disabled = recording || !stream || !Array.isArray(currentCapabilities.focusMode) || !currentCapabilities.focusMode.includes('continuous');
     els.hudShutterLabel.textContent = els.exposureSelect.disabled ? '—'
       : (els.exposureSelect.value ? '1/' + els.exposureSelect.value : 'SET');
@@ -412,7 +412,6 @@
     els.manualBadge.textContent = 'NO DETECTADO';
     els.manualBadge.classList.remove('supported');
     els.manualNote.textContent = 'Este navegador no expone los controles manuales. Prueba otra combinación de teléfono/navegador o utiliza una app nativa.';
-    focusDistanceUnverified=false;
     renderHud();
   }
 
@@ -542,6 +541,7 @@
 
   function cleanupStream() {
     if(presentationMode)leavePresentation();
+    focusDistanceUnverified=false; // reset only when switching camera/starting a new session
     if (stream) stream.getTracks().forEach((track) => track.stop());
     stream = null; videoTrack = null;
     els.cameraPreview.pause();
