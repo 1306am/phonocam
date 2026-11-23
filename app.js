@@ -29,6 +29,8 @@
     els.focusModeButton.setAttribute('aria-label', enabled ? 'Salir del modo estudio' : 'Entrar al modo estudio');
     els.focusModeButton.title = enabled ? 'Volver al diseño completo' : 'Mantener la cámara a la vista';
     els.focusModeButton.textContent = enabled ? '⤡' : '⤢';
+    const studioStatus = document.getElementById('studioStatus');
+    if (studioStatus) studioStatus.textContent = enabled ? 'STUDIO MODE · LIVE' : 'PHONOTROPE MODE';
   }
   function syncFpsControls() {
     const idx = supportedFps.indexOf(Number(els.fpsSelect.value));
